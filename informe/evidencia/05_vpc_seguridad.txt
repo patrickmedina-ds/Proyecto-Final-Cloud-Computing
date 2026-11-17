@@ -1,0 +1,57 @@
+# Fecha: 2026-11-17 12:37:38 -05
+
+$ aws ec2 describe-vpcs --vpc-ids vpc-0fac6f2d1ab59f1fa --query 'Vpcs[0].[VpcId,CidrBlock,State]' --output text
+vpc-0fac6f2d1ab59f1fa	172.31.0.0/16	available
+
+$ aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=vpc-0fac6f2d1ab59f1fa --query 'VpcEndpoints[].[VpcEndpointId,VpcEndpointType,ServiceName,State]' --output text
+vpce-06ffe41b6ff20907a	Gateway	com.amazonaws.us-east-1.dynamodb	available
+vpce-0c5e6af041ebd0462	Interface	com.amazonaws.us-east-1.sns	available
+
+$ aws ec2 describe-security-groups --group-ids sg-01975563d890002a4 --query 'SecurityGroups[0].[GroupId,GroupName,Description]' --output text
+sg-01975563d890002a4	default	default VPC security group
+
+$ aws ec2 describe-security-groups --group-ids sg-01975563d890002a4 --query 'SecurityGroups[0].IpPermissions' --output json
+[
+    {
+        "IpProtocol": "-1",
+        "UserIdGroupPairs": [
+            {
+                "UserId": "816193343783",
+                "GroupId": "sg-01975563d890002a4"
+            }
+        ],
+        "IpRanges": [],
+        "Ipv6Ranges": [],
+        "PrefixListIds": []
+    },
+    {
+        "IpProtocol": "tcp",
+        "FromPort": 3306,
+        "ToPort": 3306,
+        "UserIdGroupPairs": [
+            {
+                "UserId": "816193343783",
+                "GroupId": "sg-01975563d890002a4"
+            }
+        ],
+        "IpRanges": [],
+        "Ipv6Ranges": [],
+        "PrefixListIds": []
+    }
+]
+
+$ aws ec2 describe-security-groups --group-ids sg-01975563d890002a4 --query 'SecurityGroups[0].IpPermissionsEgress' --output json
+[
+    {
+        "IpProtocol": "-1",
+        "UserIdGroupPairs": [],
+        "IpRanges": [
+            {
+                "CidrIp": "0.0.0.0/0"
+            }
+        ],
+        "Ipv6Ranges": [],
+        "PrefixListIds": []
+    }
+]
+

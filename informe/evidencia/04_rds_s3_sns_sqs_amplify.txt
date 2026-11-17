@@ -1,0 +1,34 @@
+# Fecha: 2026-11-17 12:37:34 -05
+
+$ aws rds describe-db-instances --db-instance-identifier cs2032-vacantes-dev --query 'DBInstances[0].{Identificador:DBInstanceIdentifier,Estado:DBInstanceStatus,Motor:Engine,Version:EngineVersion,Clase:DBInstanceClass,MultiAZ:MultiAZ,PublicamenteAccesible:PubliclyAccessible,AlmacenamientoGB:AllocatedStorage,Cifrado:StorageEncrypted,Endpoint:Endpoint.Address}' --output json
+{
+    "Identificador": "cs2032-vacantes-dev",
+    "Estado": "available",
+    "Motor": "mysql",
+    "Version": "8.0.46-rds.20260908",
+    "Clase": "db.t3.micro",
+    "MultiAZ": false,
+    "PublicamenteAccesible": false,
+    "AlmacenamientoGB": 20,
+    "Cifrado": false,
+    "Endpoint": "<host-rds>"
+}
+
+$ aws s3api list-buckets --query "Buckets[?starts_with(Name,'cs2032-candidatos-cv-dev')].Name" --output text
+cs2032-candidatos-cv-dev-816193343783
+
+$ aws sns list-topics --query "Topics[?contains(TopicArn,'entrevistas')].TopicArn" --output text
+arn:aws:sns:us-east-1:816193343783:topico-entrevistas-agendadas-dev
+
+$ aws sqs list-queues --output text
+QUEUEURLS	https://sqs.us-east-1.amazonaws.com/816193343783/cola-notificaciones-entrevistas-dev
+
+$ aws amplify list-apps --query "apps[?name=='cs2032-crm-empleabilidad'].{Nombre:name,Id:appId,Dominio:defaultDomain}" --output json
+[
+    {
+        "Nombre": "cs2032-crm-empleabilidad",
+        "Id": "d2mg8kior54du3",
+        "Dominio": "d2mg8kior54du3.amplifyapp.com"
+    }
+]
+

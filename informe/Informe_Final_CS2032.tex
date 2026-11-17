@@ -1,0 +1,46 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{graphicx,booktabs,longtable,xcolor,listings,array}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage[colorlinks=true,urlcolor=blue!60!black,linkcolor=black,citecolor=black]{hyperref}
+\usepackage{url}
+\newcommand{\bdjson}{\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,showstringspaces=false,literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1 {→}{{->}}1}}
+\bdjson
+\newcommand{\cumple}{\textbf{\textcolor{green!45!black}{Cumple}}}
+\newcommand{\parcial}{\textbf{\textcolor{orange!80!black}{Parcial}}}
+\newcommand{\nocumple}{\textbf{\textcolor{red!70!black}{No cumple}}}
+\newcommand{\ev}[1]{\texttt{informe/\allowbreak evidencia/\allowbreak #1}}
+\setlength{\parskip}{4pt}
+\begin{document}
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Large Universidad de Ingeniería y Tecnología (UTEC)\par}
+\vspace{1cm}
+{\huge\bfseries Informe Final --- CRM de Empleabilidad Nacional\par}
+\vspace{1.5cm}
+{\Large Curso CS2032 --- Cloud Computing\par}
+\vspace{0.5cm}
+{\large Grupo 1 \quad|\quad Ciclo 2026-2\par}
+\vspace{2cm}
+{\large Entrega Semana 15\par}
+{\large Fecha de entrega: 22 de noviembre de 2026\par}
+\vspace{1cm}
+{\normalsize Evidencia recolectada el 17 de noviembre de 2026 (AWS, stage \texttt{dev}, \texttt{us-east-1})\par}
+\vspace{1.5cm}
+\url{https://github.com/patrickmedina-ds/Proyecto-Final-Cloud-Computing}
+\end{titlepage}
+\tableofcontents
+\newpage
+\input{secciones/01_introduccion}
+\input{secciones/02_arquitectura}
+\input{secciones/03_base_datos}
+\input{secciones/04_microservicios}
+\input{secciones/05_autenticacion_eventos}
+\input{secciones/06_despliegue_frontend}
+\input{secciones/07_pruebas_evidencia}
+\input{secciones/08_cumplimiento_brechas}
+\input{secciones/09_enlaces}
+\end{document}

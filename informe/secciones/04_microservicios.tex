@@ -1,0 +1,83 @@
+\section{Microservicios serverless}
+Requisito: API Gateway + Lambda Python 3.11, mínimo cinco microservicios protegidos. Estado: \cumple. Evidencia: \ev{01\_lambdas.txt}, \ev{02\_api\_gateway.txt}, \ev{06\_cloudformation.txt}.
+
+\subsection{Resumen}
+\begin{longtable}{p{2.3cm}p{2.7cm}p{1.6cm}p{2.2cm}p{4.2cm}}
+\toprule
+\textbf{Servicio} & \textbf{API Gateway} & \textbf{Lambdas} & \textbf{Stack CFN} & \textbf{Datos} \\
+\midrule
+\endhead
+usuarios & \texttt{dev-cs2032-usuarios} (\texttt{jas1g5t9tl}) & 4 & \texttt{cs2032-usuarios-dev} & DynamoDB \\
+candidatos & \texttt{dev-cs2032-candidatos} (\texttt{celozfy9cj}) & 6 & \texttt{cs2032-candidatos-dev} & DynamoDB, S3 \\
+vacantes & \texttt{dev-cs2032-vacantes} (\texttt{lx1fmyf70f}) & 10 & \texttt{cs2032-vacantes-dev} & RDS MySQL \\
+entrevistas & \texttt{dev-cs2032-entrevistas} (\texttt{ik4kelr8a2}) & 6 & \texttt{cs2032-entrevistas-dev} & DynamoDB, SNS, SQS \\
+reportes & \texttt{dev-cs2032-reportes} (\texttt{4zdu9n20s6}) & 5 & \texttt{cs2032-reportes-dev} & DynamoDB \\
+\midrule
+\textbf{Total} & 5 APIs & \textbf{31} & 5 stacks & \\
+\bottomrule
+\end{longtable}
+Los cinco stacks están en \texttt{UPDATE\_COMPLETE} (evidencia 06). Las 31 funciones usan \texttt{python3.11}.
+
+\subsection{Endpoints y Lambdas por servicio}
+Todos los endpoints, salvo \texttt{POST /usuarios/login} y \texttt{POST /usuarios/refresh}, exigen \texttt{Authorization: Bearer <token\_acceso>}. Cada recurso tiene además método \texttt{OPTIONS} (CORS).
+
+\begin{longtable}{p{1.9cm}p{5.1cm}p{6.8cm}}
+\toprule
+\textbf{Servicio} & \textbf{Endpoint} & \textbf{Lambda} \\
+\midrule
+\endhead
+usuarios & \texttt{POST /usuarios} & \texttt{crearUsuario} (solo administrador) \\
+ & \texttt{POST /usuarios/login} & \texttt{loginUsuario} \\
+ & \texttt{POST /usuarios/refresh} & \texttt{refrescarToken} \\
+ & \texttt{GET /usuarios/validar} & \texttt{validarTokenAcceso} \\
+\midrule
+candidatos & \texttt{GET, POST /candidatos} & \texttt{listarCandidatos}, \texttt{crearCandidato} \\
+ & \texttt{GET, PUT, DELETE /candidatos/\{candidato\_id\}} & \texttt{buscarCandidato}, \texttt{modificarCandidato}, \texttt{eliminarCandidato} \\
+ & \texttt{POST /candidatos/\{candidato\_id\}/cv-url} & \texttt{generarUrlSubidaCV} \\
+\midrule
+vacantes & \texttt{GET, POST /vacantes} & \texttt{listarVacantes}, \texttt{crearVacante} \\
+ & \texttt{GET, PUT, DELETE /vacantes/\{vacante\_id\}} & \texttt{buscarVacante}, \texttt{modificarVacante}, \texttt{eliminarVacante} \\
+ & \texttt{GET, POST /postulaciones} & \texttt{listarPostulaciones}, \texttt{crearPostulacion} \\
+ & \texttt{GET, PUT, DELETE /postulaciones/\{postulacion\_id\}} & \texttt{buscarPostulacion}, \texttt{modificarPostulacion}, \texttt{eliminarPostulacion} \\
+\midrule
+entrevistas & \texttt{GET, POST /entrevistas} & \texttt{listarEntrevistas}, \texttt{crearEntrevista} \\
+ & \texttt{GET, PUT, DELETE /entrevistas/\{entrevista\_id\}} & \texttt{buscarEntrevista}, \texttt{modificarEntrevista}, \texttt{eliminarEntrevista} \\
+ & (evento SQS, sin ruta HTTP) & \texttt{procesarNotificacion} \\
+\midrule
+reportes & \texttt{GET /reportes} & \texttt{listarReportes} \\
+ & \texttt{POST /reportes/generar} & \texttt{generarReporte} \\
+ & \texttt{GET, PUT, DELETE /reportes/\{tipo\_reporte\}} & \texttt{buscarReporte}, \texttt{modificarReporte}, \texttt{eliminarReporte} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Extracto de evidencia (01)}
+\begin{lstlisting}
+Total:       31
+Por servicio:
+   6 candidatos
+   6 entrevistas
+   5 reportes
+   4 usuarios
+  10 vacantes
+\end{lstlisting}
+Listado completo de funciones con runtime, handler y tamaño de código: \ev{01\_lambdas.txt}.
+
+\subsection{Datos ficticios: 30\,000 registros por microservicio}
+Evidencia: \ev{03\_dynamodb.txt} (DynamoDB, conteo por \texttt{tenant\_id}) y migración a RDS (\ev{07\_logs\_migracion.txt}, hechos del proyecto).
+
+\begin{longtable}{p{4.6cm}rrrrp{1.8cm}}
+\toprule
+\textbf{Recurso} & \textbf{Total} & \textbf{tenant\_1} & \textbf{tenant\_2} & \textbf{tenant\_3} & \textbf{Estado} \\
+\midrule
+\endhead
+\texttt{t\_candidatos-dev} & 30\,000 & 10\,000 & 10\,000 & 10\,000 & \cumple \\
+\texttt{t\_entrevistas-dev} & 30\,001 & 10\,001 & 10\,000 & 10\,000 & \cumple \\
+\texttt{vacantes} (RDS) & 30\,000 & 10\,000 & 10\,000 & 10\,000 & \cumple \\
+\texttt{postulaciones} (RDS) & 30\,000 & 10\,000 & 10\,000 & 10\,000 & \cumple \\
+\texttt{t\_usuarios-dev} & 5 & 3 & 1 & 1 & \nocumple \\
+\texttt{t\_reportes-dev} & 2 & 1 & 0 & 1 & \nocumple \\
+\bottomrule
+\end{longtable}
+Notas: (i) entrevistas tiene 30\,000 registros (10\,000 por tenant) tras borrar una entrevista residual de un intento fallido (ver sección~\ref{sec:contradicciones}); (ii) las tablas \texttt{t\_vacantes-dev} y \texttt{t\_postulaciones-dev} de DynamoDB conservan 30\,000 ítems cada una como origen de la migración, pero el código ya no las lee; (iii) la migración a RDS cargó 10\,000 vacantes y 10\,000 postulaciones por tenant con 0 errores; (iv) \textbf{usuarios y reportes no alcanzan 30\,000 registros}: es una brecha declarada.
+
+Otras tablas: \texttt{t\_tokens\_acceso-dev} contiene 13 tokens (12 de \texttt{tenant\_1}, 1 de \texttt{tenant\_2}).

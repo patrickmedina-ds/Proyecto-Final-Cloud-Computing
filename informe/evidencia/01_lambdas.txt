@@ -1,0 +1,43 @@
+# Fecha: 2026-11-17 12:36:55 -05
+# Región: us-east-1
+# Comando: aws lambda list-functions --query "Functions[?starts_with(FunctionName,'cs2032-')].[FunctionName,Runtime,Handler,CodeSize]" --output text
+
+cs2032-candidatos-dev-buscarCandidato        python3.11  buscar_candidato.handler        10879
+cs2032-candidatos-dev-crearCandidato         python3.11  crear_candidato.handler         11032
+cs2032-candidatos-dev-eliminarCandidato      python3.11  eliminar_candidato.handler      11034
+cs2032-candidatos-dev-generarUrlSubidaCV     python3.11  generar_url_subida_cv.handler   11538
+cs2032-candidatos-dev-listarCandidatos       python3.11  listar_candidatos.handler       11133
+cs2032-candidatos-dev-modificarCandidato     python3.11  modificar_candidato.handler     11346
+cs2032-entrevistas-dev-buscarEntrevista      python3.11  buscar_entrevista.handler       146020
+cs2032-entrevistas-dev-crearEntrevista       python3.11  crear_entrevista.handler        146522
+cs2032-entrevistas-dev-eliminarEntrevista    python3.11  eliminar_entrevista.handler     146142
+cs2032-entrevistas-dev-listarEntrevistas     python3.11  listar_entrevistas.handler      146556
+cs2032-entrevistas-dev-modificarEntrevista   python3.11  modificar_entrevista.handler    146490
+cs2032-entrevistas-dev-procesarNotificacion  python3.11  procesar_notificacion.handler   146463
+cs2032-reportes-dev-buscarReporte            python3.11  buscarReporte.handler           141444
+cs2032-reportes-dev-eliminarReporte          python3.11  eliminarReporte.handler         141562
+cs2032-reportes-dev-generarReporte           python3.11  generarReporte.handler          142292
+cs2032-reportes-dev-listarReportes           python3.11  listarReportes.handler          141681
+cs2032-reportes-dev-modificarReporte         python3.11  modificarReporte.handler        141868
+cs2032-usuarios-dev-crearUsuario             python3.11  crear_usuario.handler           11588
+cs2032-usuarios-dev-loginUsuario             python3.11  login_usuario.handler           11576
+cs2032-usuarios-dev-refrescarToken           python3.11  refrescar_token.handler         10738
+cs2032-usuarios-dev-validarTokenAcceso       python3.11  validar_token_endpoint.handler  10654
+cs2032-vacantes-dev-buscarPostulacion        python3.11  buscar_postulacion.handler      152954
+cs2032-vacantes-dev-buscarVacante            python3.11  buscar_vacante.handler          152936
+cs2032-vacantes-dev-crearPostulacion         python3.11  crear_postulacion.handler       153234
+cs2032-vacantes-dev-crearVacante             python3.11  crear_vacante.handler           152970
+cs2032-vacantes-dev-eliminarPostulacion      python3.11  eliminar_postulacion.handler    152956
+cs2032-vacantes-dev-eliminarVacante          python3.11  eliminar_vacante.handler        153045
+cs2032-vacantes-dev-listarPostulaciones      python3.11  listar_postulaciones.handler    153102
+cs2032-vacantes-dev-listarVacantes           python3.11  listar_vacantes.handler         153056
+cs2032-vacantes-dev-modificarPostulacion     python3.11  modificar_postulacion.handler   153247
+cs2032-vacantes-dev-modificarVacante         python3.11  modificar_vacante.handler       153066
+
+Total:       31
+Por servicio:
+   6 candidatos
+   6 entrevistas
+   5 reportes
+   4 usuarios
+  10 vacantes

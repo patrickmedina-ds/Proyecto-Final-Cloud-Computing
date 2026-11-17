@@ -1,0 +1,50 @@
+\section{Autenticación, S3, SNS/SQS y EDA}
+\subsection{Autenticación propia}
+AWS Academy no permite Cognito, por lo que la autenticación es propia. Estado: \cumple.
+\begin{longtable}{p{4cm}p{10cm}}
+\toprule
+\textbf{Aspecto} & \textbf{Contrato} \\
+\midrule
+\endhead
+Tablas & \texttt{t\_usuarios-dev} (índice \texttt{indice\_email}, correo único en todo el sistema) y \texttt{t\_tokens\_acceso-dev}. \\
+Login & Solo correo y contraseña (sin \texttt{tenant\_id}); el tenant se deduce del usuario. \\
+Contraseñas & PBKDF2-SHA256, 310\,000 iteraciones y salt; los hashes sha256 legados se rehashean al iniciar sesión. \\
+\texttt{token\_acceso} & Vigencia de \textbf{15 minutos}. \\
+\texttt{token\_refresh} & Vigencia de \textbf{7 días}; \texttt{POST /usuarios/refresh} emite un nuevo token de acceso. Un refresh \textbf{no} sirve en endpoints protegidos. \\
+Roles & \texttt{administrador} (puede crear usuarios de su empresa) y \texttt{reclutador}. \\
+Validación & En cada servicio: encabezado \texttt{Authorization: Bearer <token\_acceso>} y \texttt{get\_item} a \texttt{t\_tokens\_acceso}. \\
+\bottomrule
+\end{longtable}
+
+\subsection{S3, SNS y SQS}
+Evidencia: \ev{04\_rds\_s3\_sns\_sqs\_amplify.txt}. Estado: \cumple.
+\begin{longtable}{p{2.2cm}p{11.6cm}}
+\toprule
+\textbf{Servicio} & \textbf{Recurso verificado} \\
+\midrule
+\endhead
+S3 & Bucket \texttt{cs2032-candidatos-cv-dev-816193343783}; CV subido con URL prefirmada PUT a \texttt{tenant\_id/candidato\_id/cv.pdf}. \\
+SNS & Tópico \texttt{arn:aws:sns:us-east-1:816193343783:topico-entrevistas-agendadas-dev}. \\
+SQS & Cola \texttt{cola-notificaciones-entrevistas-dev} (\texttt{https://sqs.us-east-1.amazonaws.com/816193343783/cola-notificaciones-entrevistas-dev}). \\
+RDS & \texttt{cs2032-vacantes-dev}: MySQL 8.0.46, db.t3.micro, 20 GB, Single-AZ, no pública, sin cifrado, estado \texttt{available}. \\
+Amplify & Aplicación \texttt{cs2032-crm-empleabilidad} (id \texttt{d2mg8kior54du3}). \\
+\bottomrule
+\end{longtable}
+
+\subsection{Arquitectura orientada a eventos}
+Flujo: \textbf{entrevista $\rightarrow$ SNS $\rightarrow$ SQS $\rightarrow$ Lambda}.
+\begin{enumerate}
+\item \texttt{crearEntrevista} guarda la entrevista en DynamoDB y publica el evento en el tópico SNS.
+\item SNS entrega el mensaje a la cola SQS suscrita.
+\item \texttt{procesarNotificacion}, disparada por SQS, registra un recordatorio simulado para el candidato y el entrevistador.
+\end{enumerate}
+Si SNS falla, la entrevista igual se guarda y la API responde 201. Evidencia en CloudWatch (\ev{07\_logs\_migracion.txt}), cuatro eventos \texttt{recordatorio\_simulado} (dos entrevistas, candidato y entrevistador cada una):
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
+{"accion": "recordatorio_simulado", "destinatario_rol": "candidato",
+ "tenant_id": "tenant_1", "entrevista_id": "c27fe931-...-bf4306b508f3",
+ "fecha_hora": "2026-11-25T15:00:00-05:00", "modalidad": "virtual",
+ "procesado_en": "2026-11-17T01:50:22.114742+00:00"}
+{"accion": "recordatorio_simulado", "destinatario_rol": "entrevistador",
+ "destinatario": "QA", "tenant_id": "tenant_1", ...}
+\end{lstlisting}
+Los recordatorios son simulados (no se envía correo real).

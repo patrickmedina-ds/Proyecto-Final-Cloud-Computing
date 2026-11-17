@@ -1,0 +1,29 @@
+\section{Despliegue automatizado y frontend}
+\subsection{Serverless Framework}
+Cada microservicio tiene su propio \texttt{serverless.yml} con \texttt{runtime: python3.11}, \texttt{region: us-east-1} y \texttt{stage: \$\{opt:stage, 'dev'\}}; las funciones se empaquetan de forma individual (\texttt{package: individually: true}). Los recursos (tablas DynamoDB, bucket, tópico, cola) se declaran en la sección \texttt{resources}. Los cinco stacks CloudFormation \texttt{cs2032-*-dev} están en \texttt{UPDATE\_COMPLETE} (\ev{06\_cloudformation.txt}):
+\begin{lstlisting}
+cs2032-reportes-dev     UPDATE_COMPLETE  2026-11-17T01:48:16Z
+cs2032-entrevistas-dev  UPDATE_COMPLETE  2026-11-17T01:46:47Z
+cs2032-vacantes-dev     UPDATE_COMPLETE  2026-11-17T01:22:33Z
+cs2032-candidatos-dev   UPDATE_COMPLETE  2026-11-17T00:50:33Z
+cs2032-usuarios-dev     UPDATE_COMPLETE  2026-11-17T01:21:21Z
+\end{lstlisting}
+Estado: \parcial. El despliegue está automatizado, pero \textbf{solo existe el stage \texttt{dev}}; los stages \texttt{test} y \texttt{prod} no están desplegados (aunque el parámetro \texttt{--stage} lo permite). Además, \texttt{serverless.yml} de vacantes aún declara las tablas heredadas \texttt{t\_vacantes-dev} y \texttt{t\_postulaciones-dev}.
+
+\subsection{Frontend en Amplify}
+El frontend es HTML, CSS y JavaScript estático (\texttt{microservicios/cs2032-final-frontend}), desplegado en AWS Amplify y consume las cinco APIs. Estado: \cumple.
+
+\begin{tabular}{@{}ll@{}}
+\toprule
+Elemento & Valor \\
+\midrule
+URL & \url{https://main.d2mg8kior54du3.amplifyapp.com} \\
+Aplicación & \texttt{cs2032-crm-empleabilidad} (\texttt{d2mg8kior54du3}) \\
+Dominio por defecto & \texttt{d2mg8kior54du3.amplifyapp.com} \\
+\bottomrule
+\end{tabular}
+
+Limitación: la prueba en navegador del apartado Usuarios y del refresco automático de token fue verificada solo por API, no desde la interfaz.
+
+\subsection{Demo con dos tenants}
+La demostración con \texttt{tenant\_1} y \texttt{tenant\_2} se realizará en vivo en la \textbf{semana 16} (exposición presencial). Estado: \parcial{} (pendiente de exposición). Las credenciales demo (\texttt{demo.tenant\_1@cs2032.test}, \texttt{demo.tenant\_2@cs2032.test}) ya se usaron en las pruebas de API.

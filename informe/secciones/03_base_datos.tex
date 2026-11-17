@@ -1,0 +1,478 @@
+% Fragmento para \input: requiere booktabs, longtable y listings (con utf8).
+\providecommand{\bdjson}{\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,frame=single,columns=fullflexible,showstringspaces=false,literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1 {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1}}
+\bdjson
+\section{Diseño de bases de datos}
+Esta sección describe las bases de datos que usa realmente el código de los cinco microservicios (stage \texttt{dev}, región \texttt{us-\allowbreak{}east-\allowbreak{}1}).
+
+\subsection{Estrategia de multi-tenancy}
+\begin{longtable}{p{2.6cm}p{4.4cm}p{7cm}}
+\toprule
+\textbf{Almacén} & \textbf{Servicios} & \textbf{Aislamiento} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Almacén} & \textbf{Servicios} & \textbf{Aislamiento} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+DynamoDB & usuarios, candidatos, entrevistas, reportes & \texttt{tenant\_\allowbreak{}id} es la partition key de cada tabla de negocio; el valor sale siempre del token validado, nunca del body ni de la URL. \\
+RDS MySQL & vacantes y postulaciones (lectura desde entrevistas y reportes) & Patrón Single Database, Multiple Schemas: una instancia con un schema por tenant (\texttt{tenant\_\allowbreak{}1}, \texttt{tenant\_\allowbreak{}2}, \texttt{tenant\_\allowbreak{}3}). \\
+S3 & candidatos & Bucket \texttt{cs2032-\allowbreak{}candidatos-\allowbreak{}cv-\allowbreak{}dev-\allowbreak{}\textless{}account-\allowbreak{}id\textgreater{}} con prefijo \texttt{\textless{}tenant\_\allowbreak{}id\textgreater{}/\textless{}candidato\_\allowbreak{}id\textgreater{}/cv.pdf}. \\
+\end{longtable}
+
+Todas las tablas DynamoDB usan \texttt{PAY\_\allowbreak{}PER\_\allowbreak{}REQUEST}.
+
+\subsection{Usuarios y autenticación (DynamoDB)}
+\subsubsection{Tabla \texttt{t\_usuarios-dev}}
+\begin{longtable}{p{3.5cm}p{10.5cm}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Partition key & \texttt{tenant\_\allowbreak{}id} (S) \\
+Sort key & \texttt{usuario\_\allowbreak{}id} (S, uuid4) \\
+GSI \texttt{indice\_\allowbreak{}email} & PK \texttt{email} (S), sin sort key, proyección \texttt{ALL} \\
+\end{longtable}
+
+El GSI permite el login sin conocer el tenant: el correo es único en todo el sistema.
+
+\begin{longtable}{p{3.4cm}p{1.2cm}p{1.4cm}p{8cm}}
+\caption{Campos de t\_usuarios-dev}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{tenant\_\allowbreak{}id} & S & Sí (PK) & Tenant del usuario; sale del token del administrador que lo crea. \\
+\texttt{usuario\_\allowbreak{}id} & S & Sí (SK) & uuid4 generado por el servicio. \\
+\texttt{nombre} & S & Sí & Texto no vacío. \\
+\texttt{email} & S & Sí & Minúsculas; único global (GSI). \\
+\texttt{password\_\allowbreak{}hash} & S & Sí & Formato \texttt{pbkdf2\_\allowbreak{}sha256\$310000\$\textless{}salt\_\allowbreak{}hex\textgreater{}\$\textless{}hash\_\allowbreak{}hex\textgreater{}}; los hashes legados sha256 se migran al hacer login. Nunca se devuelve en la API. \\
+\texttt{rol} & S & Sí & \texttt{administrador} o \texttt{reclutador} (por defecto \texttt{reclutador}). \\
+\texttt{fecha\_\allowbreak{}registro} & S & Sí & ISO 8601 UTC. \\
+\end{longtable}
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "usuario_id": "3f1c9a52-7b0e-4d6a-9a8e-0c5d2b7f4e11",
+  "nombre": "Lucía Ramos",
+  "email": "lucia.ramos@empresa1.example",
+  "password_hash": "pbkdf2_sha256$310000$9f2a...c1$5be0...7d",
+  "rol": "administrador",
+  "fecha_registro": "2026-10-02T14:31:08.512340+00:00"
+}
+\end{lstlisting}
+
+\subsubsection{Tabla \texttt{t\_tokens\_acceso-dev}}
+\begin{longtable}{p{3.5cm}p{10.5cm}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Partition key & \texttt{token} (S, uuid4) \\
+Sort key & No tiene \\
+GSI & No tiene \\
+TTL & Atributo \texttt{ttl} habilitado \\
+\end{longtable}
+
+Usa \texttt{token} como partition key porque cada petición llega solo con el token; cada item guarda el \texttt{tenant\_\allowbreak{}id}. Es la tabla que leen todos los microservicios. Se emiten tokens \texttt{acceso} (15 minutos) y \texttt{refresh} (7 días).
+
+\begin{longtable}{p{3.4cm}p{1.2cm}p{1.4cm}p{8cm}}
+\caption{Campos de t\_tokens\_acceso-dev}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{token} & S & Sí (PK) & uuid4. \\
+\texttt{tipo} & S & Sí & \texttt{acceso} o \texttt{refresh}; un refresh no sirve en endpoints protegidos. \\
+\texttt{tenant\_\allowbreak{}id} & S & Sí & Tenant del usuario. \\
+\texttt{usuario\_\allowbreak{}id} & S & Sí & Usuario dueño del token. \\
+\texttt{expira} & N & Sí & Epoch en segundos; se compara con la hora actual. \\
+\texttt{ttl} & N & Sí & Igual a \texttt{expira}; DynamoDB borra el item al vencer. \\
+\texttt{fecha\_\allowbreak{}expiracion} & S & Sí & ISO 8601, por compatibilidad. \\
+\end{longtable}
+
+\begin{lstlisting}
+{
+  "token": "b7d3e0a4-52c1-4f7e-8d90-1a6c3e9f2b48",
+  "tipo": "acceso",
+  "tenant_id": "tenant_1",
+  "usuario_id": "3f1c9a52-7b0e-4d6a-9a8e-0c5d2b7f4e11",
+  "expira": 1795012345,
+  "ttl": 1795012345,
+  "fecha_expiracion": "2026-11-17T15:12:25+00:00"
+}
+\end{lstlisting}
+
+\subsection{Candidatos (DynamoDB y S3)}
+\subsubsection{Tabla \texttt{t\_candidatos-dev}}
+\begin{longtable}{p{3.5cm}p{10.5cm}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Partition key & \texttt{tenant\_\allowbreak{}id} (S) \\
+Sort key & \texttt{candidato\_\allowbreak{}id} (S, uuid4) \\
+GSI & Ninguno \\
+\end{longtable}
+
+\begin{longtable}{p{3.4cm}p{1.2cm}p{1.4cm}p{8cm}}
+\caption{Campos de t\_candidatos-dev}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{tenant\_\allowbreak{}id} & S & Sí (PK) & Del token. \\
+\texttt{candidato\_\allowbreak{}id} & S & Sí (SK) & uuid4. \\
+\texttt{nombre} & S & Sí & Texto no vacío. \\
+\texttt{email} & S & Sí & Debe contener \texttt{@}. \\
+\texttt{telefono} & S & Sí & Texto no vacío. \\
+\texttt{profesion} & S & Sí & Texto no vacío. \\
+\texttt{estado} & S & Sí & \texttt{activo} o \texttt{inactivo}; el alta lo fija en \texttt{activo}. \\
+\texttt{cv\_\allowbreak{}url} & S & Sí & Cadena vacía al crear; luego guarda la key S3 \texttt{\textless{}tenant\_\allowbreak{}id\textgreater{}/\textless{}candidato\_\allowbreak{}id\textgreater{}/cv.pdf} (no una URL). \\
+\texttt{fecha\_\allowbreak{}registro} & S & Sí & ISO 8601 UTC. \\
+\texttt{fecha\_\allowbreak{}actualizacion} & S & Sí & ISO 8601 UTC. \\
+\end{longtable}
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "candidato_id": "8a41d7c0-3e5b-4c29-b1f6-72d09e4a5c33",
+  "nombre": "Carlos Pérez Soto",
+  "email": "carlos.perez@correo.example",
+  "telefono": "987654321",
+  "profesion": "Ingeniero de software",
+  "estado": "activo",
+  "cv_url": "tenant_1/8a41d7c0-3e5b-4c29-b1f6-72d09e4a5c33/cv.pdf",
+  "fecha_registro": "2026-09-14T10:05:41.220113+00:00",
+  "fecha_actualizacion": "2026-09-20T16:48:02.774901+00:00"
+}
+\end{lstlisting}
+
+El PDF se guarda en el bucket S3 \texttt{cs2032-\allowbreak{}candidatos-\allowbreak{}cv-\allowbreak{}dev-\allowbreak{}\textless{}account-\allowbreak{}id\textgreater{}} mediante una URL prefirmada de 300 segundos.
+
+\subsection{Vacantes y postulaciones (RDS MySQL)}
+\subsubsection{Patrón Single Database, Multiple Schemas}
+Existe una única instancia RDS MySQL (\texttt{\textless{}host-\allowbreak{}rds\textgreater{}}, puerto 3306) con un schema por tenant (\texttt{tenant\_\allowbreak{}1}, \texttt{tenant\_\allowbreak{}2}, \texttt{tenant\_\allowbreak{}3}); cada schema contiene las mismas tablas \texttt{vacantes} y \texttt{postulaciones}. El aislamiento funciona así:
+\begin{itemize}
+\item El \texttt{tenant\_\allowbreak{}id} del token decide el schema: \texttt{common/rds.py} valida el patrón \texttt{\^{}tenant\_\allowbreak{}[a-\allowbreak{}z0-\allowbreak{}9\_\allowbreak{}]+\$} y lo pasa solo como parámetro \texttt{database} de la conexión, nunca dentro del SQL.
+\item Las consultas no filtran por tenant porque ya ejecutan en el schema correcto; todas son parametrizadas y las columnas editables van en listas blancas.
+\item La clave foránea \texttt{postulaciones.vacante\_\allowbreak{}id} hacia \texttt{vacantes.vacante\_\allowbreak{}id} es dentro del mismo schema; eliminar una vacante con postulaciones devuelve 409 (sin borrado en cascada).
+\item \texttt{postulaciones.candidato\_\allowbreak{}id} no es clave foránea: el candidato vive en DynamoDB y se valida por código.
+\end{itemize}
+
+\subsubsection{Relación entre entidades}
+Relación 1 a N: una \texttt{vacantes} recibe cero o más \texttt{postulaciones} (\texttt{postulaciones.vacante\_\allowbreak{}id} FK hacia \texttt{vacantes.vacante\_\allowbreak{}id}).
+
+\subsubsection{Entidad \texttt{vacantes}}
+\begin{longtable}{p{3cm}p{2.7cm}p{3.6cm}p{4.7cm}}
+\caption{Entidad vacantes}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Restricción} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Restricción} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{vacante\_\allowbreak{}id} & CHAR(36) & PRIMARY KEY & uuid4. \\
+\texttt{titulo} & VARCHAR(150) & NOT NULL & Obligatorio al crear. \\
+\texttt{descripcion} & TEXT & NULL & Obligatoria al crear (validación del handler). \\
+\texttt{area} & VARCHAR(100) & NULL & Opcional. \\
+\texttt{ubicacion} & VARCHAR(100) & NULL & Opcional. \\
+\texttt{modalidad} & VARCHAR(20) & NOT NULL, DEFAULT 'presencial' & \texttt{presencial}, \texttt{remoto} o \texttt{hibrido}. \\
+\texttt{salario} & DECIMAL(12,2) & NULL & Número mayor o igual a 0. \\
+\texttt{candidato\_\allowbreak{}id} & CHAR(36) & NULL & Heredada del documento original; el código no la escribe. \\
+\texttt{estado} & VARCHAR(30) & NOT NULL, DEFAULT 'abierta' & \texttt{abierta} o \texttt{cerrada}; se crea siempre \texttt{abierta}. \\
+\texttt{fecha\_\allowbreak{}publicacion} & DATETIME & NULL & UTC; se fija al crear. \\
+\texttt{fecha\_\allowbreak{}actualizacion} & DATETIME & NULL & UTC; cambia en cada modificación. \\
+\end{longtable}
+
+\subsubsection{Entidad \texttt{postulaciones}}
+\begin{longtable}{p{3cm}p{2.7cm}p{3.6cm}p{4.7cm}}
+\caption{Entidad postulaciones}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Restricción} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Restricción} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{postulacion\_\allowbreak{}id} & CHAR(36) & PRIMARY KEY & uuid4. \\
+\texttt{vacante\_\allowbreak{}id} & CHAR(36) & NOT NULL, FK a vacantes, INDEX indice\_vacante & La vacante debe existir y estar \texttt{abierta}. \\
+\texttt{candidato\_\allowbreak{}id} & CHAR(36) & NOT NULL & Se valida contra DynamoDB \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev}. \\
+\texttt{titulo\_\allowbreak{}vacante} & VARCHAR(150) & NULL & Copia del título al postular. \\
+\texttt{estado} & VARCHAR(30) & NOT NULL, DEFAULT 'postulado', INDEX indice\_estado & \texttt{postulado}, \texttt{preseleccionado}, \texttt{entrevista}, \texttt{oferta}, \texttt{contratado}, \texttt{rechazado}. \\
+\texttt{notas} & TEXT & NULL & Texto libre; solo \texttt{estado} y \texttt{notas} son modificables. \\
+\texttt{fecha\_\allowbreak{}postulacion} & DATETIME & NULL & UTC. \\
+\texttt{fecha\_\allowbreak{}actualizacion} & DATETIME & NULL & UTC. \\
+\end{longtable}
+
+\subsubsection{DDL resumido}
+\begin{lstlisting}
+CREATE SCHEMA IF NOT EXISTS tenant_1;  -- idem tenant_2, tenant_3
+
+CREATE TABLE tenant_1.vacantes (
+  vacante_id CHAR(36) PRIMARY KEY,
+  titulo VARCHAR(150) NOT NULL,
+  descripcion TEXT, area VARCHAR(100), ubicacion VARCHAR(100),
+  modalidad VARCHAR(20) NOT NULL DEFAULT 'presencial',
+  salario DECIMAL(12,2), candidato_id CHAR(36),
+  estado VARCHAR(30) NOT NULL DEFAULT 'abierta',
+  fecha_publicacion DATETIME, fecha_actualizacion DATETIME
+);
+CREATE TABLE tenant_1.postulaciones (
+  postulacion_id CHAR(36) PRIMARY KEY,
+  vacante_id CHAR(36) NOT NULL,
+  candidato_id CHAR(36) NOT NULL,
+  titulo_vacante VARCHAR(150),
+  estado VARCHAR(30) NOT NULL DEFAULT 'postulado',
+  notas TEXT,
+  fecha_postulacion DATETIME, fecha_actualizacion DATETIME,
+  INDEX indice_estado (estado),
+  INDEX indice_vacante (vacante_id),
+  FOREIGN KEY (vacante_id) REFERENCES tenant_1.vacantes (vacante_id)
+);
+\end{lstlisting}
+
+\subsubsection{Ejemplos}
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "vacante_id": "c2e84b90-1d7a-4f35-a6c8-9e0b3d5f7a12",
+  "titulo": "Analista de datos",
+  "descripcion": "Responsable de tableros y reportes de selección.",
+  "area": "datos", "ubicacion": "Lima", "modalidad": "hibrido",
+  "salario": 4500.0, "estado": "abierta",
+  "fecha_publicacion": "2026-10-05T09:00:00+00:00",
+  "fecha_actualizacion": "2026-10-05T09:00:00+00:00"
+}
+\end{lstlisting}
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "postulacion_id": "5d90f1b7-6a3c-4e82-8f14-b27c0a9d3e66",
+  "vacante_id": "c2e84b90-1d7a-4f35-a6c8-9e0b3d5f7a12",
+  "candidato_id": "8a41d7c0-3e5b-4c29-b1f6-72d09e4a5c33",
+  "titulo_vacante": "Analista de datos",
+  "estado": "preseleccionado",
+  "notas": "Cumple el perfil técnico.",
+  "fecha_postulacion": "2026-10-06T11:20:00+00:00",
+  "fecha_actualizacion": "2026-10-08T15:45:30+00:00"
+}
+\end{lstlisting}
+
+La API añade \texttt{tenant\_\allowbreak{}id} (tomado del token) y omite los valores NULL.
+
+\subsubsection{Tablas DynamoDB heredadas}
+El \texttt{serverless.yml} de vacantes aún declara \texttt{t\_\allowbreak{}vacantes-\allowbreak{}dev} (PK \texttt{tenant\_\allowbreak{}id}, SK \texttt{vacante\_\allowbreak{}id}) y \texttt{t\_\allowbreak{}postulaciones-\allowbreak{}dev} (PK \texttt{tenant\_\allowbreak{}id}, SK \texttt{postulacion\_\allowbreak{}id}; GSI \texttt{indice\_\allowbreak{}estado} = \texttt{tenant\_\allowbreak{}id} + \texttt{estado} e \texttt{indice\_\allowbreak{}vacante} = \texttt{tenant\_\allowbreak{}id} + \texttt{vacante\_\allowbreak{}id}, ambos con proyección \texttt{ALL}). Los handlers actuales no las leen ni escriben: fueron la fuente de la migración a RDS y los scripts de carga de entrevistas todavía las consultan. Los índices de RDS reemplazan a esos GSI.
+
+\subsection{Entrevistas (DynamoDB)}
+\subsubsection{Tabla \texttt{t\_entrevistas-dev}}
+\begin{longtable}{p{3.5cm}p{10.5cm}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Partition key & \texttt{tenant\_\allowbreak{}id} (S) \\
+Sort key & \texttt{entrevista\_\allowbreak{}id} (S, uuid4) \\
+GSI & Ninguno (los filtros por \texttt{estado}, \texttt{candidato\_\allowbreak{}id} y \texttt{vacante\_\allowbreak{}id} usan FilterExpression sobre un Query por tenant) \\
+\end{longtable}
+
+\begin{longtable}{p{3.4cm}p{1.2cm}p{1.4cm}p{8cm}}
+\caption{Campos de t\_entrevistas-dev}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{tenant\_\allowbreak{}id} & S & Sí (PK) & Del token. \\
+\texttt{entrevista\_\allowbreak{}id} & S & Sí (SK) & uuid4. \\
+\texttt{candidato\_\allowbreak{}id} & S & Sí & Se valida en DynamoDB \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev}. \\
+\texttt{vacante\_\allowbreak{}id} & S & Sí & Se valida en RDS (\texttt{SELECT 1 FROM vacantes} en el schema del tenant). \\
+\texttt{postulacion\_\allowbreak{}id} & S & No & Cadena vacía si no se envía. \\
+\texttt{entrevistador} & S & Sí & Texto no vacío. \\
+\texttt{fecha\_\allowbreak{}hora} & S & Sí & ISO 8601 con zona. \\
+\texttt{modalidad} & S & Sí & \texttt{presencial} o \texttt{virtual}. \\
+\texttt{estado} & S & Sí & \texttt{agendada} (al crear), \texttt{realizada} o \texttt{cancelada}. \\
+\texttt{notas} & S & Sí & Cadena vacía al crear. \\
+\texttt{fecha\_\allowbreak{}creacion} & S & Sí & ISO 8601 UTC. \\
+\texttt{fecha\_\allowbreak{}actualizacion} & S & Sí & ISO 8601 UTC. \\
+\end{longtable}
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "entrevista_id": "e19a6c3d-0b84-4a7f-93d2-5c8f1e0b7a29",
+  "candidato_id": "8a41d7c0-3e5b-4c29-b1f6-72d09e4a5c33",
+  "vacante_id": "c2e84b90-1d7a-4f35-a6c8-9e0b3d5f7a12",
+  "postulacion_id": "5d90f1b7-6a3c-4e82-8f14-b27c0a9d3e66",
+  "entrevistador": "Marta Quispe",
+  "fecha_hora": "2026-11-20T15:00:00-05:00",
+  "modalidad": "virtual",
+  "estado": "agendada",
+  "notas": "",
+  "fecha_creacion": "2026-11-12T13:02:10.318822+00:00",
+  "fecha_actualizacion": "2026-11-12T13:02:10.318822+00:00"
+}
+\end{lstlisting}
+
+Recursos de mensajería asociados: tópico SNS \texttt{topico-\allowbreak{}entrevistas-\allowbreak{}agendadas-\allowbreak{}dev} y cola SQS \texttt{cola-\allowbreak{}notificaciones-\allowbreak{}entrevistas-\allowbreak{}dev}; el evento \texttt{entrevista\_\allowbreak{}agendada} lleva \texttt{tenant\_\allowbreak{}id}, \texttt{entrevista\_\allowbreak{}id}, \texttt{candidato\_\allowbreak{}id}, \texttt{vacante\_\allowbreak{}id}, \texttt{fecha\_\allowbreak{}hora}, \texttt{modalidad} y \texttt{entrevistador}.
+
+\subsection{Reportes (DynamoDB)}
+\subsubsection{Tabla \texttt{t\_reportes-dev}}
+\begin{longtable}{p{3.5cm}p{10.5cm}}
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Elemento} & \textbf{Valor} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Partition key & \texttt{tenant\_\allowbreak{}id} (S) \\
+Sort key & \texttt{tipo\_\allowbreak{}reporte} (S) \\
+GSI & Ninguno \\
+\end{longtable}
+
+\texttt{POST /reportes/generar} guarda un item con \texttt{tipo\_\allowbreak{}reporte} = \texttt{resumen\_\allowbreak{}general} (uno por tenant, se sobrescribe). El script \texttt{scripts/cargar\_\allowbreak{}datos.py} siembra además reportes diarios con \texttt{tipo\_\allowbreak{}reporte} = \texttt{diario\_\allowbreak{}\textless{}fecha\textgreater{}\_\allowbreak{}\textless{}area\textgreater{}}.
+
+\begin{longtable}{p{4cm}p{1.2cm}p{1.4cm}p{7.4cm}}
+\caption{Campos del item resumen\_general}\\
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Campo} & \textbf{Tipo} & \textbf{Oblig.} & \textbf{Descripción} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+\texttt{tenant\_\allowbreak{}id} & S & Sí (PK) & Del token. \\
+\texttt{tipo\_\allowbreak{}reporte} & S & Sí (SK) & \texttt{resumen\_\allowbreak{}general}. \\
+\texttt{total\_\allowbreak{}usuarios} & N & Sí & Conteo en \texttt{t\_\allowbreak{}usuarios-\allowbreak{}dev}. \\
+\texttt{total\_\allowbreak{}candidatos} & N & Sí & Conteo en \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev}. \\
+\texttt{total\_\allowbreak{}vacantes} & N & Sí & Suma de \texttt{vacantes\_\allowbreak{}por\_\allowbreak{}estado} (RDS). \\
+\texttt{vacantes\_\allowbreak{}por\_\allowbreak{}estado} & M & Sí & \texttt{\{estado: conteo\}} desde RDS. \\
+\texttt{total\_\allowbreak{}postulaciones} & N & Sí & Suma de \texttt{postulaciones\_\allowbreak{}por\_\allowbreak{}estado} (RDS). \\
+\texttt{postulaciones\_\allowbreak{}por\_\allowbreak{}estado} & M & Sí & \texttt{\{estado: conteo\}} desde RDS. \\
+\texttt{total\_\allowbreak{}entrevistas} & N & Sí & Suma de \texttt{entrevistas\_\allowbreak{}por\_\allowbreak{}estado}. \\
+\texttt{entrevistas\_\allowbreak{}por\_\allowbreak{}estado} & M & Sí & \texttt{\{estado: conteo\}} desde \texttt{t\_\allowbreak{}entrevistas-\allowbreak{}dev}. \\
+\texttt{total\_\allowbreak{}contratados} & N & Sí & Postulaciones en estado \texttt{contratado}. \\
+\texttt{tasa\_\allowbreak{}contratacion} & N & Sí & Contratados por 100 entre total de postulaciones, 2 decimales (0 si no hay). \\
+\texttt{observaciones} & S & Sí & Vacía al generar; es lo único que modifica \texttt{PUT /reportes/\{tipo\_\allowbreak{}reporte\}}. \\
+\texttt{fecha\_\allowbreak{}actualizacion} & S & Sí & ISO 8601 UTC. \\
+\end{longtable}
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "tipo_reporte": "resumen_general",
+  "total_usuarios": 4,
+  "total_candidatos": 10000,
+  "total_vacantes": 10000,
+  "vacantes_por_estado": { "abierta": 8200, "cerrada": 1800 },
+  "total_postulaciones": 10000,
+  "postulaciones_por_estado": { "postulado": 4100, "preseleccionado": 2300,
+    "entrevista": 1500, "oferta": 800, "contratado": 700, "rechazado": 600 },
+  "total_entrevistas": 10000,
+  "entrevistas_por_estado": { "agendada": 1500, "realizada": 7300, "cancelada": 1200 },
+  "total_contratados": 700,
+  "tasa_contratacion": 7.0,
+  "observaciones": "",
+  "fecha_actualizacion": "2026-11-17T12:00:00+00:00"
+}
+\end{lstlisting}
+
+Item diario sembrado por el script (misma clave, otros atributos):
+
+\begin{lstlisting}
+{
+  "tenant_id": "tenant_1",
+  "tipo_reporte": "diario_2026-11-10_datos",
+  "fecha": "2026-11-10", "area": "datos",
+  "nuevos_candidatos": 31, "nuevas_vacantes": 4,
+  "total_postulaciones": 22, "total_entrevistas": 9,
+  "total_contratados": 2, "tasa_contratacion": 9.09,
+  "observaciones": "",
+  "fecha_actualizacion": "2026-11-11T02:00:00+00:00"
+}
+\end{lstlisting}
+
+\subsection{Relación entre microservicios}
+\begin{longtable}{p{2.8cm}p{4.6cm}p{6.6cm}}
+\toprule
+\textbf{Servicio} & \textbf{Escribe} & \textbf{Lee de otros} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Servicio} & \textbf{Escribe} & \textbf{Lee de otros} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+Usuarios & \texttt{t\_\allowbreak{}usuarios-\allowbreak{}dev}, \texttt{t\_\allowbreak{}tokens\_\allowbreak{}acceso-\allowbreak{}dev} & Ninguno. \\
+Candidatos & \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev}, bucket S3 de CVs & \texttt{t\_\allowbreak{}tokens\_\allowbreak{}acceso-\allowbreak{}dev} (validación de token). \\
+Vacantes / postulaciones & RDS: \texttt{vacantes}, \texttt{postulaciones} (schema del tenant) & \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev} (GetItem para validar \texttt{candidato\_\allowbreak{}id}); \texttt{t\_\allowbreak{}tokens\_\allowbreak{}acceso-\allowbreak{}dev}. \\
+Entrevistas & \texttt{t\_\allowbreak{}entrevistas-\allowbreak{}dev}; publica en SNS & \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev} (GetItem); RDS \texttt{vacantes} (SELECT 1); \texttt{t\_\allowbreak{}tokens\_\allowbreak{}acceso-\allowbreak{}dev}. \\
+Reportes & \texttt{t\_\allowbreak{}reportes-\allowbreak{}dev} & RDS \texttt{vacantes} y \texttt{postulaciones} (COUNT por estado); \texttt{t\_\allowbreak{}usuarios-\allowbreak{}dev}, \texttt{t\_\allowbreak{}candidatos-\allowbreak{}dev} y \texttt{t\_\allowbreak{}entrevistas-\allowbreak{}dev} (Query por \texttt{tenant\_\allowbreak{}id}); \texttt{t\_\allowbreak{}tokens\_\allowbreak{}acceso-\allowbreak{}dev}. \\
+\end{longtable}
+
+Las referencias entre servicios (\texttt{candidato\_\allowbreak{}id}, \texttt{vacante\_\allowbreak{}id}, \texttt{postulacion\_\allowbreak{}id}) son lógicas: se validan por código, no con claves foráneas, salvo \texttt{postulaciones.vacante\_\allowbreak{}id} hacia \texttt{vacantes.vacante\_\allowbreak{}id} dentro de RDS.

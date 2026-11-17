@@ -1,0 +1,47 @@
+\section{Cumplimiento de requisitos, brechas y trabajo pendiente}\label{sec:cumplimiento}
+\subsection{Matriz de cumplimiento}
+\begin{longtable}{@{}p{0.5cm}p{5.3cm}p{1.9cm}p{6.6cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Requisito} & \textbf{Estado} & \textbf{Evidencia / observación} \\
+\midrule
+\endhead
+1 & Diagrama de arquitectura & \cumple & Figura~\ref{fig:arq}, \texttt{.png} y \texttt{.drawio}. \\
+2 & Funcionalidad SaaS tipo CRM & \cumple & Sección 1 y 4; pruebas extremo a extremo. \\
+3 & Multi-tenancy (\texttt{tenant\_id}; RDS Single DB, Multiple Schemas) & \cumple & Sección 3; 404 entre tenants. \\
+4 & Serverless: 5 microservicios protegidos, Python 3.11 & \cumple & 5 APIs, 31 Lambdas (01, 02). \\
+5 & Base de datos por microservicio (ER o JSON) & \cumple & Sección 3. \\
+6 & 30\,000 registros ficticios por microservicio en 3 tenants & \parcial & Candidatos, entrevistas, vacantes y postulaciones: cumple. Usuarios (5) y reportes (2): \nocumple. \\
+7 & Uso de S3, SNS y SQS & \cumple & Bucket, tópico, cola y logs (04, 07). \\
+8 & EDA entrevista $\rightarrow$ SNS $\rightarrow$ SQS $\rightarrow$ Lambda & \cumple & Eventos \texttt{recordatorio\_simulado}. \\
+9 & Autenticación propia y contrato de tokens (15 min / 7 días) & \cumple & Sección 5; pruebas de refresh. \\
+10 & Despliegue con Serverless Framework, stages & \parcial & \texttt{serverless.yml} por servicio; solo \texttt{dev}. \\
+11 & Frontend en Amplify consumiendo las APIs & \cumple & URL en sección 6. \\
+12 & Demo con 2 tenants & \parcial & Pendiente de exposición en semana 16. \\
+13 & Un repositorio público por microservicio & \parcial & Monorepo público con una carpeta por microservicio (sección 9). \\
+14 & Pruebas & \cumple & Sección 7 (08). \\
+15 & Brechas declaradas & \cumple & Esta sección. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Brechas declaradas}
+\begin{enumerate}
+\item \textbf{Volumen de datos:} \texttt{t\_usuarios-dev} (5 registros: 3, 1, 1) y \texttt{t\_reportes-dev} (2 registros: 1, 0, 1) \textbf{no} llegan a 30\,000 registros. \nocumple.
+\item \textbf{Stages:} solo \texttt{dev}; \texttt{test} y \texttt{prod} no están desplegados.
+\item \textbf{Repositorios:} el curso pide un repositorio por microservicio; el equipo usa un \textbf{monorepo} con carpetas en \texttt{microservicios/}.
+\item \textbf{Demo con 2 tenants:} se realizará en vivo en la semana 16; aún no expuesta.
+\item \textbf{Postman:} existen colecciones en vacantes, entrevistas y reportes; faltan en usuarios y candidatos.
+\item \textbf{Documentos de contrato antiguos} (\texttt{01\_sandra...}, \texttt{02\_santiago...}) describen el diseño previo (token de 2 h, \texttt{tenant\_id} en el body); el código y los README ya están actualizados y prevalecen.
+\item \textbf{Tablas heredadas} \texttt{t\_vacantes-dev} y \texttt{t\_postulaciones-dev} siguen declaradas en el \texttt{serverless.yml} de vacantes como origen de la migración.
+\item \textbf{Frontend:} el apartado Usuarios y el refresco automático de token solo se verificaron por API, no en navegador.
+\item \textbf{Seguridad de RDS:} la instancia no está cifrada y es Single-AZ (limitación de AWS Academy y de costo); no es pública y solo admite tráfico desde su security group.
+\item \textbf{Notificaciones:} los recordatorios son simulados (solo logs, sin envío real).
+\end{enumerate}
+
+\subsection{Datos contradictorios entre fuentes}\label{sec:contradicciones}
+\begin{itemize}
+\item \textbf{Entrevistas residuales:} una captura inicial mostró 30\,001 entrevistas. Era un residuo de un intento de agendar que respondió 502 (timeout de la publicación en SNS después de guardar la entrevista). Se borró por la API y el recuento verificado es \textbf{30\,000} (10\,000 por tenant). La evidencia \ev{03\_dynamodb.txt} se recalculó con paginación completa.
+\item \textbf{Conteos de la prueba:} los conteos del reporte de la prueba extremo a extremo se capturaron antes de la limpieza; incluyen la vacante, el candidato y la entrevista de prueba (\texttt{total\_vacantes} 10\,001, \texttt{total\_entrevistas} 10\,002). Después de borrarlos, los conteos vuelven a 10\,000 por tenant.
+\end{itemize}
+
+\subsection{Trabajo pendiente}
+Completar el volumen de usuarios y reportes (o justificar su naturaleza), desplegar \texttt{test} y \texttt{prod}, completar las colecciones Postman, probar el frontend en navegador y realizar la demo con dos tenants en la semana 16.

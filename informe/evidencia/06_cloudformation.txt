@@ -1,0 +1,9 @@
+# Fecha: 2026-11-17 12:37:43 -05
+
+$ aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName,'cs2032-')].[StackName,StackStatus,LastUpdatedTime]" --output text
+cs2032-reportes-dev	UPDATE_COMPLETE	2026-11-17T01:48:16.019000+00:00
+cs2032-entrevistas-dev	UPDATE_COMPLETE	2026-11-17T01:46:47.867000+00:00
+cs2032-vacantes-dev	UPDATE_COMPLETE	2026-11-17T01:22:33.982000+00:00
+cs2032-candidatos-dev	UPDATE_COMPLETE	2026-11-17T00:50:33.617000+00:00
+cs2032-usuarios-dev	UPDATE_COMPLETE	2026-11-17T01:21:21.570000+00:00
+

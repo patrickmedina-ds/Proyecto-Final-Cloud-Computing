@@ -1,0 +1,19 @@
+# Fecha: 2026-11-17 12:37:09 -05
+# Comando: aws dynamodb list-tables + scan --projection-expression tenant_id (boto3 paginator, conteo en python)
+
+Tablas:
+   t_candidatos-dev
+   t_entrevistas-dev
+   t_postulaciones-dev
+   t_reportes-dev
+   t_tokens_acceso-dev
+   t_usuarios-dev
+   t_vacantes-dev
+
+t_usuarios-dev: total=5  tenant_1=3, tenant_2=1, tenant_3=1
+t_candidatos-dev: total=30000  tenant_1=10000, tenant_2=10000, tenant_3=10000
+t_entrevistas-dev: total=30000  tenant_1=10000, tenant_2=10000, tenant_3=10000  (recalculado el 17-nov con paginación completa tras borrar 1 entrevista residual de un intento fallido)
+t_reportes-dev: total=2  tenant_1=1, tenant_3=1
+t_tokens_acceso-dev: total=13  tenant_1=12, tenant_2=1
+t_vacantes-dev: total=30000  tenant_1=10000, tenant_2=10000, tenant_3=10000
+t_postulaciones-dev: total=30000  tenant_1=10000, tenant_2=10000, tenant_3=10000

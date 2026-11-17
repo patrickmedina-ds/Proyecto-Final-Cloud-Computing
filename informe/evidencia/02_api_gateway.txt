@@ -1,0 +1,25 @@
+# Fecha: 2026-11-17 12:36:57 -05
+# Región: us-east-1
+# Comando: aws apigateway get-rest-apis ; aws apigateway get-resources --rest-api-id <id>
+
+== dev-cs2032-reportes (4zdu9n20s6)
+   /reportes ['GET', 'OPTIONS']
+   /reportes/generar ['OPTIONS', 'POST']
+   /reportes/{tipo_reporte} ['DELETE', 'GET', 'OPTIONS', 'PUT']
+== dev-cs2032-candidatos (celozfy9cj)
+   /candidatos ['GET', 'OPTIONS', 'POST']
+   /candidatos/{candidato_id} ['DELETE', 'GET', 'OPTIONS', 'PUT']
+   /candidatos/{candidato_id}/cv-url ['OPTIONS', 'POST']
+== dev-cs2032-entrevistas (ik4kelr8a2)
+   /entrevistas ['GET', 'OPTIONS', 'POST']
+   /entrevistas/{entrevista_id} ['DELETE', 'GET', 'OPTIONS', 'PUT']
+== dev-cs2032-usuarios (jas1g5t9tl)
+   /usuarios ['OPTIONS', 'POST']
+   /usuarios/login ['OPTIONS', 'POST']
+   /usuarios/refresh ['OPTIONS', 'POST']
+   /usuarios/validar ['GET', 'OPTIONS']
+== dev-cs2032-vacantes (lx1fmyf70f)
+   /postulaciones ['GET', 'OPTIONS', 'POST']
+   /postulaciones/{postulacion_id} ['DELETE', 'GET', 'OPTIONS', 'PUT']
+   /vacantes ['GET', 'OPTIONS', 'POST']
+   /vacantes/{vacante_id} ['DELETE', 'GET', 'OPTIONS', 'PUT']

@@ -1,0 +1,32 @@
+\section{Introducción}
+Este informe documenta el proyecto final del curso CS2032 (Cloud Computing, UTEC, ciclo 2026-2): un SaaS multi-tenant tipo CRM de \textbf{empleabilidad nacional}. La plataforma permite que empresas reclutadoras (tenants) administren candidatos, vacantes, postulaciones, entrevistas y reportes mediante cinco microservicios serverless sobre AWS.
+
+\subsection{Alcance y fuentes}
+Todas las cifras provienen de la evidencia recolectada el 17 de noviembre de 2026 en \texttt{informe/evidencia/} (archivos 01 a 08, solo lectura sobre AWS salvo las pruebas de API) o del código en \texttt{microservicios/}. Cuando un requisito no se cumple, se declara así de forma explícita (sección~\ref{sec:cumplimiento}).
+
+\begin{tabular}{@{}ll@{}}
+\toprule
+Dato & Valor \\
+\midrule
+Tipo de SaaS & CRM de empleabilidad nacional \\
+Tenants & \texttt{tenant\_1} (Talento Andino S.A.C.), \texttt{tenant\_2} (Recluta Perú Consultores), \texttt{tenant\_3} \\
+Región / runtime & \texttt{us-east-1} / Python 3.11 \\
+Framework de despliegue & Serverless Framework v3 \\
+Stages desplegados & solo \texttt{dev} \\
+Cuenta AWS & AWS Academy (sin Cognito) \\
+\bottomrule
+\end{tabular}
+
+\subsection{Funcionalidad del CRM}
+\begin{tabular}{@{}p{3cm}p{3.2cm}p{7.6cm}@{}}
+\toprule
+Entidad & Microservicio & Funcionalidad \\
+\midrule
+Tenant / usuario & usuarios & Alta de usuarios por el administrador, login, refresh y validación de tokens. \\
+Candidato & candidatos & CRUD de candidatos y URL prefirmada para subir el CV a S3. \\
+Vacante & vacantes & CRUD de vacantes en RDS (un schema por tenant). \\
+Postulación & vacantes & CRUD de postulaciones con pipeline de estados (postulado, preseleccionado, entrevista, oferta, contratado, rechazado). \\
+Entrevista & entrevistas & CRUD de entrevistas y notificación asíncrona (SNS, SQS, Lambda). \\
+Reporte & reportes & Generación y consulta de reportes con conteos del tenant. \\
+\bottomrule
+\end{tabular}

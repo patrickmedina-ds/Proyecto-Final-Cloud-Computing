@@ -1,0 +1,70 @@
+# Fecha: 2026-11-17 12:38:11
+# Script: python3 con urllib (equivalente a curl); credenciales demo, tokens no registrados
+
+## a) Login
+Login demo.tenant_1@cs2032.test
+  POST /dev/usuarios/login -> HTTP 200
+  respuesta: (omitido: contiene tokens)
+  token_acceso obtenido: sí; token_refresh obtenido: sí
+Login demo.tenant_2@cs2032.test
+  POST /dev/usuarios/login -> HTTP 200
+  respuesta: (omitido: contiene tokens)
+  token_acceso obtenido: sí; token_refresh obtenido: sí
+
+## b) Sin token
+GET /candidatos sin Authorization (esperado 401)
+  GET /dev/candidatos -> HTTP 401
+  respuesta: {"error": "Token no enviado"}
+
+## c) Aislamiento multi-tenant
+tenant_1 crea candidato (esperado 201)
+  POST /dev/candidatos -> HTTP 201
+  respuesta: {"candidato": {"tenant_id": "tenant_1", "candidato_id": "12fd97cc-8cbd-4c9e-817f-6dc63de89f5a", "nombre": "Evidencia Prueba", "email": "evidencia@cs2032.test", "telefono": "999000222", "profesion": "Q
+tenant_2 GET del candidato de tenant_1 (esperado 404)
+  GET /dev/candidatos/12fd97cc-8cbd-4c9e-817f-6dc63de89f5a -> HTTP 404
+  respuesta: {"error": "Candidato no encontrado"}
+tenant_2 DELETE del candidato de tenant_1 (esperado 404)
+  DELETE /dev/candidatos/12fd97cc-8cbd-4c9e-817f-6dc63de89f5a -> HTTP 404
+  respuesta: {"error": "Candidato no encontrado"}
+tenant_1 GET del candidato, sigue existiendo (esperado 200)
+  GET /dev/candidatos/12fd97cc-8cbd-4c9e-817f-6dc63de89f5a -> HTTP 200
+  respuesta: {"candidato": {"nombre": "Evidencia Prueba", "cv_url": "", "fecha_actualizacion": "2026-11-17T17:38:16.469249+00:00", "tenant_id": "tenant_1", "profesion": "QA", "telefono": "999000222", "fecha_regist
+
+## d) Vacante (RDS), entrevista y reporte
+tenant_1 crea vacante en RDS (esperado 201)
+  POST /dev/vacantes -> HTTP 201
+  respuesta: {"vacante": {"tenant_id": "tenant_1", "vacante_id": "103f155a-c174-42b6-9aa1-0658648e2858", "titulo": "Vacante Evidencia", "descripcion": "Prueba de evidencia", "area": "Tecnolog\u00eda", "modalidad":
+tenant_1 agenda entrevista (esperado 201)
+  POST /dev/entrevistas -> HTTP 201
+  respuesta: {"entrevista": {"tenant_id": "tenant_1", "entrevista_id": "06df5e5c-8d3a-4a09-b4f5-860bac8644ee", "candidato_id": "12fd97cc-8cbd-4c9e-817f-6dc63de89f5a", "vacante_id": "103f155a-c174-42b6-9aa1-0658648
+tenant_1 genera reporte resumen_general (esperado 201)
+  POST /dev/reportes/generar -> HTTP 201
+  respuesta: {"reporte": {"tenant_id": "tenant_1", "tipo_reporte": "resumen_general", "total_usuarios": 3, "total_candidatos": 10001, "total_vacantes": 10001, "vacantes_por_estado": {"abierta": 7013, "cerrada": 29
+  conteos: {'total_usuarios': 3, 'total_candidatos': 10001, 'total_vacantes': 10001, 'total_postulaciones': 10000, 'total_entrevistas': 10002}
+tenant_1 lista vacantes (esperado 200; confirma que la nueva existe)
+  GET /dev/vacantes -> HTTP 200
+  respuesta: (omitido: listado paginado de 10000+ vacantes)
+  nota: el listado está paginado, por lo que la vacante nueva no se busca en la primera página; la evidencia válida es el conteo del reporte (total_vacantes = 10001, antes 10000) y el 201 de la entrevista, que valida la vacante contra RDS.
+
+## e) Limpieza
+DELETE entrevista de prueba
+  DELETE /dev/entrevistas/06df5e5c-8d3a-4a09-b4f5-860bac8644ee -> HTTP 200
+  respuesta: {"mensaje": "Entrevista eliminada"}
+DELETE vacante de prueba
+  DELETE /dev/vacantes/103f155a-c174-42b6-9aa1-0658648e2858 -> HTTP 200
+  respuesta: {"mensaje": "Vacante eliminada"}
+DELETE candidato de prueba
+  DELETE /dev/candidatos/12fd97cc-8cbd-4c9e-817f-6dc63de89f5a -> HTTP 200
+  respuesta: {"mensaje": "Candidato eliminado"}
+Verificación: candidato ya no existe (esperado 404)
+  GET /dev/candidatos/12fd97cc-8cbd-4c9e-817f-6dc63de89f5a -> HTTP 404
+  respuesta: {"error": "Candidato no encontrado"}
+
+## f) Refresh
+POST /usuarios/refresh con token_refresh (esperado 200)
+  POST /dev/usuarios/refresh -> HTTP 200
+  respuesta: (omitido: contiene tokens)
+  nuevo token_acceso obtenido: sí
+token_refresh usado en endpoint protegido (esperado 401)
+  GET /dev/candidatos -> HTTP 401
+  respuesta: {"error": "Token inv\u00e1lido"}

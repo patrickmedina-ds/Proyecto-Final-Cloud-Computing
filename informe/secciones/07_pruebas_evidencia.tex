@@ -1,0 +1,49 @@
+\section{Pruebas y evidencia}\label{sec:pruebas}
+Fuente: \ev{08\_pruebas\_api.txt}, ejecutadas el 17 de noviembre de 2026 contra el stage \texttt{dev} (script Python equivalente a \texttt{curl}). Los datos de prueba se borraron al final.
+
+\begin{longtable}{p{4.4cm}p{5.4cm}p{1.6cm}p{2.4cm}}
+\toprule
+\textbf{Prueba} & \textbf{Petición} & \textbf{Esperado} & \textbf{Obtenido} \\
+\midrule
+\endhead
+Login \texttt{tenant\_1} y \texttt{tenant\_2} & \texttt{POST /usuarios/login} & 200 & 200 (ambos) \\
+Sin token & \texttt{GET /candidatos} sin \texttt{Authorization} & 401 & 401 \\
+\texttt{tenant\_1} crea candidato & \texttt{POST /candidatos} & 201 & 201 \\
+\texttt{tenant\_2} lee candidato ajeno & \texttt{GET /candidatos/\{id\}} & 404 & 404 \\
+\texttt{tenant\_2} borra candidato ajeno & \texttt{DELETE /candidatos/\{id\}} & 404 & 404 \\
+\texttt{tenant\_1} lee su candidato & \texttt{GET /candidatos/\{id\}} & 200 & 200 \\
+Crear vacante (RDS) & \texttt{POST /vacantes} & 201 & 201 \\
+Agendar entrevista & \texttt{POST /entrevistas} & 201 & 201 \\
+Generar reporte & \texttt{POST /reportes/generar} & 201 & 201 \\
+Limpieza (entrevista, vacante, candidato) & \texttt{DELETE} & 200 & 200 (los tres) \\
+Candidato borrado & \texttt{GET /candidatos/\{id\}} & 404 & 404 \\
+Refresh & \texttt{POST /usuarios/refresh} & 200 & 200 \\
+Refresh en endpoint protegido & \texttt{GET /candidatos} con \texttt{token\_refresh} & 401 & 401 \\
+\bottomrule
+\end{longtable}
+
+\subsection{Extractos}
+\begin{lstlisting}
+GET /dev/candidatos (sin Authorization) -> HTTP 401
+  {"error": "Token no enviado"}
+tenant_2 GET candidato de tenant_1 -> HTTP 404
+  {"error": "Candidato no encontrado"}
+tenant_2 DELETE candidato de tenant_1 -> HTTP 404
+tenant_1 GET del mismo candidato -> HTTP 200
+token_refresh en GET /dev/candidatos -> HTTP 401
+  {"error": "Token inválido"}
+\end{lstlisting}
+
+\subsection{Extremo a extremo}
+Con \texttt{tenant\_1}: crear vacante en RDS (201), agendar entrevista (201, valida la vacante contra RDS) y generar el reporte \texttt{resumen\_general}. El reporte contó la vacante nueva: \texttt{total\_vacantes} pasó de 10\,000 a 10\,001. Conteos devueltos (captura durante la prueba, antes de la limpieza):
+\begin{lstlisting}
+total_usuarios: 3, total_candidatos: 10001, total_vacantes: 10001,
+total_postulaciones: 10000, total_entrevistas: 10002
+\end{lstlisting}
+El listado de vacantes está paginado, por lo que la vacante nueva no se busca en la primera página; la evidencia válida es el conteo del reporte.
+
+\subsection{Otras evidencias}
+\begin{itemize}
+\item Colecciones Postman: existen en vacantes, entrevistas y reportes, no en todos los servicios.
+\item Logs de la Lambda temporal de migración (\texttt{cs2032-rds-migracion-tmp}): la función ya fue borrada y su grupo de logs no tiene streams; las cifras de migración (10\,000 por tenant, 0 errores) provienen de la verificación hecha en su momento (\ev{07\_logs\_migracion.txt}).
+\end{itemize}
