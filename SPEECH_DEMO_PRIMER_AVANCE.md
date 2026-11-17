@@ -19,18 +19,24 @@
 | 5 | Pestaña 4 — DynamoDB | Consola → DynamoDB → Tablas → `t_candidatos-dev` → **Explorar elementos de la tabla** |
 | 6 | Pestaña 5 — Swagger | https://main.d2mg8kior54du3.amplifyapp.com/docs.html |
 | 7 | Pestaña 6 — Frontend tenant_1 | https://main.d2mg8kior54du3.amplifyapp.com (sin iniciar sesión aún) |
+| 7b | Pestaña extra (opcional) — RDS | Consola → RDS → Bases de datos → `cs2032-vacantes-dev` (MySQL) |
 | 8 | Pestaña 7 — Frontend tenant_2 | **Otra pestaña nueva** con la misma URL (cada pestaña tiene su propia sesión) |
 | 9 | Un PDF en el escritorio | `cv_valeria.pdf` (cualquier PDF pequeño), solo si se va a mostrar la subida a S3 |
 | 10 | Zoom del navegador | 110–125 % para que se lea en la videollamada |
 
-**Usuarios de prueba** (ya existen en la base):
+**Usuarios de prueba** (ya existen en la base, los tres con rol `administrador` de su empresa):
 
-| Tenant | Empresa (en el frontend) | Email | Contraseña |
+| Tenant (se guarda en el usuario) | Empresa (en el frontend) | Email | Contraseña |
 |---|---|---|---|
 | `tenant_1` | Talento Andino S.A.C. (azul) | `demo.tenant_1@cs2032.test` | `Demo-cs2032` |
 | `tenant_2` | Recluta Perú Consultores (verde) | `demo.tenant_2@cs2032.test` | `Demo-cs2032` |
+| `tenant_3` | (tercera empresa) | `demo.tenant_3@cs2032.test` | `Demo-cs2032` |
 
-⚠️ El token dura **2 horas**. Si la demo empieza más tarde, vuelvan a iniciar sesión justo antes.
+El login es **solo con correo y contraseña**: no se elige empresa.
+
+⚠️ El `token_acceso` dura **15 minutos** (el `token_refresh` dura 7 días). El frontend renueva el token de acceso
+solo, pero en Swagger hay que volver a hacer login o usar `POST /usuarios/refresh` si pasan 15 minutos. Hagan el
+login justo antes de empezar.
 
 **Reparto sugerido:** Parte 1 → Patrick · Parte 2 → Sandra y Santiago · Parte 3 → Sanders (ajústenlo como prefieran).
 
@@ -59,22 +65,25 @@ multi-tenant y con un componente basado en eventos. Vamos a mostrar el diagrama,
 `dev-cs2032-candidatos`, `dev-cs2032-vacantes`, `dev-cs2032-entrevistas` y `dev-cs2032-reportes`."*
 
 🎤 *"Detrás de cada API hay **una función Lambda por endpoint**, no una sola Lambda por servicio. En total son
-**29 funciones** en Python 3.11:*
-- *Usuarios tiene 3: crear usuario, login y validar token.*
+**31 funciones** en Python 3.11, cada una con su paquete individual:*
+- *Usuarios tiene 4: crear usuario, login, refrescar token y validar token de acceso.*
 - *Candidatos tiene 6: el CRUD de 5 operaciones más la que genera la URL para subir el CV.*
 - *Vacantes y Postulaciones tiene 10: el CRUD de vacantes y el CRUD de postulaciones.*
-- *Entrevistas tiene 5 y Reportes tiene 5.*
+- *Entrevistas tiene 6: el CRUD de 5 operaciones más `procesarNotificacion`, que consume la cola SQS.*
+- *Reportes tiene 5.*
 
 *Así cada función tiene una sola responsabilidad, escala de forma independiente y se despliega por separado."*
 
-🎤 *"A la derecha está la **capa de datos**. Cada microservicio tiene **su propia base de datos** en DynamoDB:*
-- *`t_usuarios` y `t_tokens_acceso`,*
-- *`t_candidatos`,*
-- *`t_vacantes` y `t_postulaciones`, que tiene índices secundarios por estado y por vacante para el pipeline,*
-- *`t_entrevistas`,*
-- *`t_reportes`.*
+🎤 *"A la derecha está la **capa de datos**. Cada microservicio tiene **su propia base de datos**:*
+- *En **DynamoDB**: `t_usuarios` (con el índice `indice_email`) y `t_tokens_acceso`, `t_candidatos`, `t_entrevistas` y `t_reportes`.*
+- *En **MySQL sobre RDS** (instancia `cs2032-vacantes-dev`): **vacantes y postulaciones**, con un **schema por tenant**.
+  Las tablas DynamoDB `t_vacantes` y `t_postulaciones` quedaron como origen de la migración.*
 
-*Cada microservicio tiene **30 000 registros ficticios**, 10 000 por tenant."*
+*Cada microservicio tiene **30 000 registros ficticios**, 10 000 por tenant. En RDS, vacantes y postulaciones se
+migraron con **10 000 por tenant cada una**."*
+
+🎤 *"Como las Lambdas de Vacantes están dentro de la **VPC** para llegar a RDS, definimos en CloudFormation un
+**VPC Endpoint de DynamoDB** (tipo gateway), así siguen leyendo `t_tokens_acceso` sin salir a internet."*
 
 ### 1.2 Integración con S3, SNS y SQS
 
@@ -84,33 +93,43 @@ archivo por la Lambda. El archivo se guarda en la ruta `tenant_id/candidato_id/c
 archivos están separados por tenant."*
 
 🎤 *"**SNS y SQS** forman la parte basada en eventos. Cuando se agenda una entrevista, la Lambda `crearEntrevista`
-guarda el registro y **publica un evento** en el tópico SNS `topico-entrevistas-agendadas`. El tópico lo entrega a la
-cola SQS `cola-notificaciones-entrevistas`. La cola dispara la Lambda `procesarNotificacion`, que envía el
-recordatorio al candidato y al entrevistador, y queda el registro en CloudWatch. El usuario no espera a que se envíe
-la notificación: la API responde en cuanto la entrevista se guarda y el resto ocurre de forma asíncrona. Este flujo
-está diseñado y lo implementamos en la segunda fase, por eso aparece marcado como **Fase 2**."*
+guarda el registro y **publica un evento** en el tópico SNS `topico-entrevistas-agendadas-dev`. El tópico lo entrega a
+la cola SQS `cola-notificaciones-entrevistas-dev`. La cola dispara la Lambda `procesarNotificacion`, que registra el
+recordatorio en CloudWatch. El usuario no espera: la API responde en cuanto la entrevista se guarda y el resto ocurre
+de forma asíncrona. Si SNS llegara a fallar, la entrevista **se guarda igual** y la API responde 201. Este flujo ya
+está **implementado y desplegado** en dev."*
 
 ### 1.3 Cómo manejamos el multi-tenancy (punto clave, decirlo despacio)
 
-🎤 *"Usamos el modelo **pool**: todos los tenants comparten las mismas tablas, pero cada registro está aislado
-por su **partition key, que siempre es `tenant_id`**. En DynamoDB eso significa que los datos de cada empresa
-viven en su propia partición."*
+🎤 *"En DynamoDB usamos el modelo **pool**: todos los tenants comparten las mismas tablas, pero cada registro está
+aislado por su **partition key, que siempre es `tenant_id`**. Los datos de cada empresa viven en su propia
+partición."*
 
-🎤 *"Lo más importante es **de dónde sale el `tenant_id`**. **El cliente nunca lo envía** en el body ni en la URL de
-las operaciones de negocio:*
-1. *Al hacer **login**, el microservicio de Usuarios crea un token y lo guarda en `t_tokens_acceso` junto con el
-   `tenant_id` del usuario y una fecha de expiración de 2 horas.*
-2. *En cada petición, el frontend envía el header `Authorization: Bearer <token>`.*
-3. *Las 26 Lambdas de los otros 4 microservicios ejecutan primero `validar_token()`: buscan el token en
-   `t_tokens_acceso`, verifican que no haya expirado y **obtienen de ahí el `tenant_id`**.*
-4. *Toda consulta, inserción, actualización o eliminación usa ese `tenant_id` como parte de la clave.*
+🎤 *"Lo más importante es **de dónde sale el `tenant_id`**. **El cliente nunca lo envía**, ni al iniciar sesión ni en
+el body o la URL de las operaciones de negocio:*
+1. *El login es **solo con correo y contraseña**. El `tenant_id` está guardado **en el registro del usuario**. Por
+   eso el correo es único en todo el sistema (índice `indice_email`).*
+2. *Al hacer **login**, el microservicio de Usuarios verifica la contraseña y devuelve un `token_acceso` (15 minutos)
+   y un `token_refresh` (7 días), junto con el rol, el `tenant_id` y el `usuario_id`. Los tokens se guardan en
+   `t_tokens_acceso` con el `tenant_id` del usuario.*
+3. *En cada petición, el frontend envía el header `Authorization: Bearer <token_acceso>`. Cuando vence, el frontend
+   llama a `POST /usuarios/refresh` y obtiene un nuevo `token_acceso`. **Un token de refresh no sirve en los
+   endpoints protegidos.***
+4. *Las 26 Lambdas HTTP de los otros 4 microservicios ejecutan primero `validar_token()`: validan el token, verifican
+   que no haya expirado y **obtienen de ahí el `tenant_id`**.*
+5. *Toda consulta, inserción, actualización o eliminación usa ese `tenant_id` como parte de la clave.*
 
 *Como el tenant viene del token y no de lo que escribe el usuario, es **imposible** pedir datos de otra empresa.
 Aunque alguien conozca el ID de un registro ajeno, la clave que se arma es `(su_tenant, id_ajeno)`, que no existe,
 y la respuesta es **404**. Lo vamos a demostrar en vivo."*
 
-🎤 *"Para la segunda fase, el microservicio de Vacantes migra a **RDS MySQL** con el patrón **Single Database,
-Multiple Schemas**: un schema por tenant, y el token decide a qué schema conectarse."*
+🎤 *"El microservicio de Vacantes, que incluye las postulaciones, vive en **RDS MySQL** con el patrón **Single
+Database, Multiple Schemas**: una sola instancia (`cs2032-vacantes-dev`) y **un schema por tenant**. El `tenant_id`
+del token decide a qué schema se conecta la Lambda. Si intentan borrar una vacante que tiene postulaciones, la API
+responde **409**."*
+
+🎤 *"Las contraseñas se guardan con **PBKDF2-SHA256**, con salt y **310 000 iteraciones**. Los hashes antiguos se
+actualizan solos la próxima vez que el usuario inicia sesión."*
 
 ### 1.4 Despliegue
 
@@ -127,7 +146,7 @@ CloudFormation, las Lambdas, el API Gateway y las tablas. Soporta los stages `de
 
 ⌨️ `cs2032`
 
-🎤 *"Aquí están las **29 funciones Lambda** desplegadas en `us-east-1`. El nombre sigue el patrón
+🎤 *"Aquí están las **31 funciones Lambda** desplegadas en `us-east-1`. El nombre sigue el patrón
 `servicio-stage-función`, por ejemplo `cs2032-candidatos-dev-crearCandidato`."*
 
 🖱️ Abrir **`cs2032-candidatos-dev-crearCandidato`**:
@@ -166,12 +185,17 @@ selector se elige el microservicio."*
 
 ⌨️
 ```json
-{ "tenant_id": "tenant_1", "email": "demo.tenant_1@cs2032.test", "password": "Demo-cs2032" }
+{ "email": "demo.tenant_1@cs2032.test", "password": "Demo-cs2032" }
 ```
 
-🖱️ **Execute** → copiar el valor de `"token"` de la respuesta. Guardarlo en un bloc de notas como **TOKEN_T1**.
+🖱️ **Execute** → copiar el valor de `"token_acceso"` de la respuesta. Guardarlo en un bloc de notas como **TOKEN_T1**.
+Señalar también `token_refresh`, `rol`, `tenant_id` y `usuario_id`.
 
-🎤 *"El login devuelve un token. Este token queda asociado a `tenant_1` en la tabla `t_tokens_acceso`."*
+🎤 *"Fíjense que el login no pide empresa: solo correo y contraseña. El `tenant_id` sale del registro del usuario y
+viene en la respuesta, junto con el rol `administrador`. El `token_acceso` dura 15 minutos y queda asociado a
+`tenant_1`; el `token_refresh`, de 7 días, solo sirve para pedir otro token de acceso en `POST /usuarios/refresh`."*
+
+🖱️ (Opcional, 20 s) `POST /usuarios/refresh` → pegar el `token_refresh` → **Execute** → devuelve un nuevo `token_acceso`.
 
 **Paso B — Autorizar Swagger con el token**
 
@@ -224,10 +248,10 @@ del token, no lo enviamos nosotros."*
 
 ⌨️
 ```json
-{ "tenant_id": "tenant_2", "email": "demo.tenant_2@cs2032.test", "password": "Demo-cs2032" }
+{ "email": "demo.tenant_2@cs2032.test", "password": "Demo-cs2032" }
 ```
 
-🖱️ Copiar el token como **TOKEN_T2** → definición **MS2** → **Authorize** → **Logout** → pegar **TOKEN_T2** → **Authorize** → **Close**.
+🖱️ Copiar el `token_acceso` como **TOKEN_T2** → definición **MS2** → **Authorize** → **Logout** → pegar **TOKEN_T2** → **Authorize** → **Close**.
 
 🖱️ `GET /candidatos/{candidato_id}` con **ID_VALERIA** → **Execute** → **404 · Candidato no encontrado**.
 🖱️ `DELETE /candidatos/{candidato_id}` con **ID_VALERIA** → **Execute** → **404**.
@@ -253,9 +277,13 @@ crear, modificar y eliminar."*
 **Paso G — Volumen de datos (opcional, 20 s)**
 
 🖱️ DynamoDB → Tablas: mostrar que existen `t_candidatos-dev`, `t_vacantes-dev`, `t_postulaciones-dev`,
-`t_entrevistas-dev`, `t_reportes-dev`, `t_usuarios-dev` y `t_tokens_acceso-dev`.
+`t_entrevistas-dev`, `t_reportes-dev`, `t_usuarios-dev` y `t_tokens_acceso-dev`. (Opcional) Mostrar en RDS la
+instancia `cs2032-vacantes-dev`.
 
-🎤 *"Cada microservicio tiene 30 000 registros, 10 000 por tenant, generados con scripts de Python, Faker y boto3."*
+🎤 *"Cada microservicio tiene 30 000 registros, 10 000 por tenant, generados con scripts de Python, Faker y boto3.
+Las tablas DynamoDB de vacantes y postulaciones son el origen de la migración: en RDS MySQL, con un schema por
+tenant, quedaron 10 000 vacantes y 10 000 postulaciones por tenant. Candidatos, tokens y usuarios siguen en
+DynamoDB."*
 
 ---
 
@@ -271,13 +299,13 @@ microservicios."*
 
 ### 3.2 Tenant 1 — Talento Andino (pestaña 6)
 
-🖱️ Iniciar sesión:
-- **Empresa (tenant):** `Talento Andino S.A.C. (tenant_1)`
+🖱️ Iniciar sesión (el formulario solo tiene correo y contraseña, no hay selector de empresa):
 - **Email:** ⌨️ `demo.tenant_1@cs2032.test`
 - **Contraseña:** ⌨️ `Demo-cs2032`
 
-🎤 *"Al iniciar sesión, el frontend llama al microservicio de **Usuarios** y recibe el token. La interfaz se pinta en
-**azul** con el nombre de la empresa abajo a la izquierda. Abajo a la derecha está la **Consola API**: ahí se ve en
+🎤 *"Al iniciar sesión, el frontend llama al microservicio de **Usuarios** y recibe los tokens. No elegimos empresa:
+se muestra según el tenant de la sesión. La interfaz se pinta en **azul** con el nombre de la empresa abajo a la
+izquierda. Como somos administradores, en el menú aparece el apartado **Usuarios**. Abajo a la derecha está la **Consola API**: ahí se ve en
 vivo cada llamada a los microservicios, con su código HTTP."*
 
 🖱️ Abrir la **Consola API** (abajo a la derecha) y dejarla visible.
@@ -309,6 +337,13 @@ prefirmada; en la Consola API se ven las tres llamadas: pedir la URL, el PUT a S
 
 🖱️ **Clic sobre el ID** del candidato (la columna ID): se copia al portapapeles. Pegarlo en el bloc de notas como **ID_DIEGO**.
 
+**Usuarios (solo administradores)**
+
+🖱️ (Opcional, 30 s) Menú **Usuarios** → mostrar la lista de usuarios de la empresa y el formulario de alta.
+
+🎤 *"Solo un **administrador** de la empresa puede crear usuarios desde la app. Un usuario con otro rol no ve este
+apartado. El correo debe ser único en todo el sistema."*
+
 **Crear vacante (microservicio Vacantes)**
 
 🖱️ Menú **Vacantes** → **+ Nueva vacante**:
@@ -325,6 +360,8 @@ prefirmada; en la Consola API se ven las tres llamadas: pedir la URL, el PUT a S
 
 🖱️ **Guardar** → la vacante aparece arriba, resaltada.
 
+🎤 *"La vacante se guarda en **MySQL RDS**, en el schema de `tenant_1`. Las postulaciones también viven en RDS."*
+
 **Postular (la "oportunidad" del CRM)**
 
 🖱️ En la fila de la vacante → **Postular** → en **Candidato** elegir **Diego Ramírez Torres** (sale primero)
@@ -338,7 +375,8 @@ prefirmada; en la Consola API se ven las tres llamadas: pedir la URL, el PUT a S
 🖱️ ▶ (pasa a **Preseleccionado**) → ▶ (pasa a **Entrevista**).
 
 🎤 *"Este es el tablero de oportunidades: postulado, preseleccionado, entrevista, oferta, contratado o rechazado.
-Cada movimiento es un PUT al microservicio de Vacantes, que usa un índice secundario por estado."*
+Cada movimiento es un PUT al microservicio de Vacantes, que actualiza la postulación en RDS, en el schema del
+tenant."*
 
 **Agendar entrevista (microservicio Entrevistas)**
 
@@ -354,8 +392,11 @@ Cada movimiento es un PUT al microservicio de Vacantes, que usa un índice secun
 
 🖱️ **Agendar**. Ir al menú **Entrevistas**: la entrevista aparece arriba, resaltada → **✔ Realizada**.
 
-🎤 *"Las entrevistas son las **actividades** de seguimiento del CRM. En la fase 2, este mismo paso publicará el
-evento en SNS para el recordatorio asíncrono."*
+🎤 *"Las entrevistas son las **actividades** de seguimiento del CRM. Este mismo paso publica el evento en SNS; la
+cola SQS dispara `procesarNotificacion`, que registra el recordatorio en CloudWatch."*
+
+🖱️ (Opcional, 30 s) Consola → CloudWatch → Grupos de registros → `/aws/lambda/cs2032-entrevistas-dev-procesarNotificacion`
+→ mostrar el registro del recordatorio de la entrevista recién agendada.
 
 **Cerrar el ciclo: contratar y ver el reporte**
 
@@ -367,12 +408,12 @@ solo del tenant del token. El contratado nuevo ya aparece en el total."*
 
 ### 3.3 Tenant 2 — Recluta Perú (pestaña 7)
 
-🖱️ Ir a la **pestaña 7** e iniciar sesión:
-- **Empresa:** `Recluta Perú Consultores (tenant_2)`
+🖱️ Ir a la **pestaña 7** e iniciar sesión (solo correo y contraseña):
 - **Email:** ⌨️ `demo.tenant_2@cs2032.test`
 - **Contraseña:** ⌨️ `Demo-cs2032`
 
-🎤 *"Ahora, en otra pestaña, entramos como **otra empresa**. La interfaz cambia a **verde** y el dashboard muestra
+🎤 *"Ahora, en otra pestaña, entramos con **otro usuario**, y el sistema deduce que es **otra empresa** a partir de su
+registro. La interfaz cambia a **verde** y el dashboard muestra
 **otros números**: son los datos de `tenant_2`."*
 
 🖱️ Menú **Vacantes**: la vacante "Desarrollador Backend Python" **no aparece**.
@@ -387,15 +428,16 @@ no existe. Las dos empresas usan la misma aplicación y las mismas tablas, pero 
 ### 3.4 Cierre (20 s)
 
 🎤 *"En resumen:*
-- *5 microservicios con 29 Lambdas, cada uno con su API Gateway y su tabla en DynamoDB;*
-- *30 000 registros por microservicio;*
-- *multi-tenancy por `tenant_id` derivado del token;*
+- *5 microservicios con 31 Lambdas, cada uno con su API Gateway y su propia base de datos (DynamoDB, y MySQL RDS
+  para vacantes y postulaciones);*
+- *30 000 registros por microservicio, 10 000 por tenant;*
+- *autenticación con correo y contraseña, tokens de acceso y refresh, y multi-tenancy por `tenant_id` derivado del
+  token;*
 - *S3 para los CV;*
-- *SNS y SQS para las notificaciones (fase 2);*
+- *SNS, SQS y una Lambda para las notificaciones de entrevistas, ya implementado;*
 - *un frontend en Amplify con las funciones de un CRM de reclutamiento, probado con dos tenants.*
 
-*Para la entrega final completaremos el flujo SNS/SQS, la migración de Vacantes a RDS con un schema por tenant y
-los stages test y prod. Muchas gracias."*
+*Para la entrega final nos queda reforzar pruebas y completar los stages test y prod. Muchas gracias."*
 
 ---
 
@@ -403,18 +445,25 @@ los stages test y prod. Muchas gracias."*
 
 | Pregunta | Respuesta |
 |---|---|
-| ¿Por qué no Cognito? | AWS Academy no permite crear User Pools; implementamos autenticación propia con tokens en DynamoDB que expiran en 2 h. |
+| ¿Por qué no Cognito? | AWS Academy no permite crear User Pools; implementamos autenticación propia: contraseñas con PBKDF2-SHA256 (salt, 310 000 iteraciones) y tokens en DynamoDB (acceso 15 min, refresh 7 días). |
+| ¿Por qué el correo es único en todo el sistema? | Para que el login no necesite `tenant_id`: con solo el correo (índice `indice_email`) se encuentra al usuario y su tenant sale de su registro. |
+| ¿Cómo se crea un usuario? | Solo un administrador de la empresa, desde el apartado Usuarios de la app (`crearUsuario` exige token de administrador). Los usuarios demo son administradores. |
+| ¿Qué pasa cuando vence el token de acceso? | `POST /usuarios/refresh` con el token de refresh emite un nuevo token de acceso. El refresh no sirve en endpoints protegidos. |
+| ¿Por qué Vacantes está en RDS? | Para mostrar el patrón Single Database, Multiple Schemas (un schema por tenant) y contar con relaciones entre vacantes y postulaciones; borrar una vacante con postulaciones responde 409. |
+| ¿Qué pasa si SNS falla al agendar una entrevista? | La entrevista se guarda igual y la API responde 201; solo se pierde el recordatorio. |
 | ¿Qué pasa si alguien manda `tenant_id` en el body? | Se ignora: el tenant siempre sale del token. |
 | ¿Por qué una Lambda por endpoint? | Menor responsabilidad por función, permisos y escalado independientes, despliegue más seguro. |
 | ¿Cómo paginan 10 000 registros? | `Query` por partition key con `Limit 100` y un cursor (`LastEvaluatedKey`) que el backend fuerza al tenant del token. |
-| ¿Cómo se protegen las APIs? | Header `Authorization: Bearer`; sin token o con token inválido/expirado → 401. |
+| ¿Cómo se protegen las APIs? | Header `Authorization: Bearer <token_acceso>`; sin token, con token inválido/expirado o con un token de refresh → 401. |
 | ¿Por qué el CV no pasa por la Lambda? | Con la URL prefirmada el navegador sube directo a S3: menos latencia y costo, y no hay límite de payload de API Gateway. |
 | ¿Qué rol IAM usan? | `LabRole` (el Learner Lab no permite crear roles). |
 
 ## Plan B si algo falla en vivo
 
-- **"Sesión expirada"** en el frontend → volver a iniciar sesión (el token dura 2 h).
-- **Swagger da 401** → volver a hacer login y repetir **Authorize** con el token nuevo.
+- **"Sesión expirada"** en el frontend → volver a iniciar sesión (el token de acceso dura 15 min; el refresh, 7 días).
+- **Swagger da 401** → volver a hacer login (o `POST /usuarios/refresh`) y repetir **Authorize** con el `token_acceso` nuevo.
+- **El login de un usuario demo falla** → los usuarios `demo.tenant_1/2/3@cs2032.test` deben existir como
+  **administradores**; verificarlo antes de la demo (no se crean sobre la marcha).
 - **No carga nada** → comprobar que el Learner Lab esté iniciado; como respaldo, ejecutar
   `bash repos/prueba_integracion.sh`, que prueba los 5 microservicios y el aislamiento entre tenants en ~30 s.
 - **Recalcular reporte tarda** → esperar ~15 s: lee alrededor de 50 000 ítems del tenant.

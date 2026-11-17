@@ -2,3 +2,5 @@
 *.pdf
 repos/
 .DS_Store
+.aws
+.$*
