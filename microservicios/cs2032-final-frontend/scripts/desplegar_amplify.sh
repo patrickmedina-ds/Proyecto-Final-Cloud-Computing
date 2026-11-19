@@ -1,37 +1,62 @@
 #!/usr/bin/env bash
-# Despliega el frontend en AWS Amplify Hosting (despliegue manual por zip, sin GitHub).
-# Uso (desde la raíz del repo, con credenciales del Learner Lab): bash scripts/desplegar_amplify.sh
+# Compila EmpleaCRM y publica el contenido de dist en la aplicación Amplify del proyecto.
 set -euo pipefail
-
-APP_NOMBRE=cs2032-crm-empleabilidad
-RAMA=main
-REGION=us-east-1
-
-APP_ID=$(aws amplify list-apps --region $REGION \
-  --query "apps[?name=='$APP_NOMBRE'].appId | [0]" --output text)
-if [ "$APP_ID" = "None" ] || [ -z "$APP_ID" ]; then
-  APP_ID=$(aws amplify create-app --region $REGION --name $APP_NOMBRE --platform WEB \
-    --query app.appId --output text)
-  aws amplify create-branch --region $REGION --app-id "$APP_ID" --branch-name $RAMA --stage PRODUCTION >/dev/null
-  echo "App creada: $APP_ID"
+app_nombre=cs2032-crm-empleabilidad
+rama=main
+region=us-east-1
+temporal=$(mktemp -d)
+trap 'rm -rf -- "$temporal"' EXIT
+if [[ $# -eq 0 ]]; then
+  cd "$(dirname "$0")/.."
+  npm ci --include=dev --no-audit --no-fund
+  npm run build
+  archivo="$temporal/frontend.zip"
+  (cd dist && zip -qr "$archivo" .)
+elif [[ $# -eq 2 && "$1" == "--zip" && -f "$2" ]]; then
+  archivo=$2
+else
+  echo "Uso: bash scripts/desplegar_amplify.sh [--zip archivo-compilado.zip]" >&2
+  exit 2
 fi
 
-ZIP=$(mktemp -d)/frontend.zip
-zip -qr "$ZIP" index.html docs.html app.js config.js styles.css docs/openapi
-
-read -r JOB_ID URL_SUBIDA < <(aws amplify create-deployment --region $REGION --app-id "$APP_ID" \
-  --branch-name $RAMA --query "[jobId, zipUploadUrl]" --output text)
-curl -sf -X PUT -H "Content-Type: application/zip" --upload-file "$ZIP" "$URL_SUBIDA"
-aws amplify start-deployment --region $REGION --app-id "$APP_ID" --branch-name $RAMA --job-id "$JOB_ID" >/dev/null
-
-echo -n "Desplegando job $JOB_ID"
+app_id=$(aws amplify list-apps --region "$region" \
+  --query "apps[?name=='$app_nombre'].appId | [0]" --output text)
+if [[ -z "$app_id" || "$app_id" == None ]]; then
+  app_id=$(aws amplify create-app --region "$region" --name "$app_nombre" --platform WEB \
+    --query app.appId --output text)
+fi
+# En una rama existente basta el permiso de despliegue del script original.
+preparar_subida() {
+  aws amplify create-deployment --region "$region" --app-id "$app_id" --branch-name "$rama" \
+    --query '[jobId, zipUploadUrl]' --output text
+}
+if ! datos_subida=$(preparar_subida 2>"$temporal/error-aws"); then
+  if ! grep -q 'NotFoundException' "$temporal/error-aws"; then
+    cat "$temporal/error-aws" >&2
+    exit 1
+  fi
+  if ! aws amplify create-branch --region "$region" --app-id "$app_id" --branch-name "$rama" \
+    --stage PRODUCTION >/dev/null 2>"$temporal/error-rama"; then
+    if ! grep -qi 'already exists' "$temporal/error-rama"; then
+      cat "$temporal/error-rama" >&2
+      exit 1
+    fi
+  fi
+  datos_subida=$(preparar_subida)
+fi
+read -r job_id url_subida <<< "$datos_subida"
+curl --fail --silent --show-error -X PUT -H 'Content-Type: application/zip' \
+  --upload-file "$archivo" "$url_subida"
+aws amplify start-deployment --region "$region" --app-id "$app_id" --branch-name "$rama" --job-id "$job_id" >/dev/null
+echo "Despliegue $job_id en curso."
 while true; do
-  ESTADO=$(aws amplify get-job --region $REGION --app-id "$APP_ID" --branch-name $RAMA \
-    --job-id "$JOB_ID" --query job.summary.status --output text)
-  case "$ESTADO" in
-    SUCCEED) echo " listo"; break ;;
-    FAILED|CANCELLED) echo " $ESTADO"; exit 1 ;;
-    *) echo -n "."; sleep 3 ;;
+  estado=$(aws amplify get-job --region "$region" --app-id "$app_id" --branch-name "$rama" \
+    --job-id "$job_id" --query job.summary.status --output text)
+  case "$estado" in
+    SUCCEED) break ;;
+    FAILED|CANCELLED) echo "El despliegue terminó con estado $estado." >&2; exit 1 ;;
+    *) sleep 4 ;;
   esac
 done
-echo "URL: https://$RAMA.$(aws amplify get-app --region $REGION --app-id "$APP_ID" --query app.defaultDomain --output text)"
+dominio=$(aws amplify get-app --region "$region" --app-id "$app_id" --query app.defaultDomain --output text)
+echo "Aplicación publicada en https://$rama.$dominio"
