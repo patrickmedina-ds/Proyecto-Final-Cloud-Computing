@@ -19,6 +19,7 @@ provider:
     RDS_USER: ${env:RDS_USER}
     RDS_PORT: ${env:RDS_PORT, '3306'}
     RDS_PASSWORD: ${env:RDS_PASSWORD}
+    RDS_TLS: ${env:RDS_TLS, '0'}
   # AWS Academy no permite crear roles IAM: se usa LabRole
   iam:
     role: arn:aws:iam::${aws:accountId}:role/LabRole

@@ -7,6 +7,7 @@ decide a qué schema se conecta; el nombre del schema va SOLO en el parámetro
 import base64
 import json
 import os
+from pathlib import Path
 import re
 import uuid
 from datetime import datetime, timezone
@@ -33,10 +34,18 @@ def conexion_tenant(tenant_id):
     """Abre una conexión al schema del tenant. El llamador debe cerrarla (try/finally)."""
     if not isinstance(tenant_id, str) or not PATRON_TENANT.match(tenant_id):
         raise ValueError("tenant_id inválido")
+    tls = {}
+    if os.environ.get("RDS_TLS") == "1":
+        tls = {
+            "ssl_ca": str(Path(__file__).with_name("rds-ca.pem")),
+            "ssl_verify_cert": True,
+            "ssl_verify_identity": True,
+        }
     return pymysql.connect(
         host=os.environ.get("RDS_HOST", RDS_HOST),
         user=os.environ.get("RDS_USER", RDS_USER),
         password=os.environ.get("RDS_PASSWORD", RDS_PASSWORD),
+        **tls,
         port=int(os.environ.get("RDS_PORT", RDS_PORT)),
         database=tenant_id,
         charset="utf8mb4",

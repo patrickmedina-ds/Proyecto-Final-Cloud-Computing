@@ -1,0 +1,9 @@
+# Despliegue de RDS y sus microservicios
+
+Ejecuta `bash infra/rds/desplegar.sh <stage>` desde la raíz del repositorio. Usa un stage de prueba distinto de `dev` reservado para este despliegue y una VPC preparada para ese stage. La cuenta necesita los permisos para Serverless, RDS, Lambda, CloudFormation, EC2 y Secrets Manager, además del rol existente `LabRole`. El entorno de ejecución necesita AWS CLI autenticada, Node.js con npm, Python 3 con pip, curl, tar y zip. Para validar también la aplicación, despliega Usuarios y Candidatos en el mismo stage.
+
+Exporta `RDS_SUBNET_IDS` (dos subredes privadas de zonas distintas, separadas por coma), `RDS_SECURITY_GROUP_ID` (RDS), `RDS_SG_IDS` (el único grupo de seguridad de las Lambdas y del endpoint SNS), `RDS_VPC_ID`, `RDS_ROUTE_TABLE_IDS` (separadas por coma), `RDS_INSTANCE_CLASS` y `RDS_USER` (usuario maestro). Autoriza TCP 3306 desde el grupo de las Lambdas al de RDS. Los stacks de Vacantes y Entrevistas gestionan los endpoints de DynamoDB y SNS. Usa tablas de rutas y una VPC donde esos endpoints se puedan crear para el stage, y habilita tráfico HTTPS desde las Lambdas al endpoint de SNS.
+
+El script despliega MySQL privado con un secreto administrado, aplica mediante TLS verificado el `schema.sql` a los tres tenants mediante una Lambda dentro de la VPC y luego despliega Vacantes, Entrevistas y Reportes. CloudFormation resuelve las referencias al secreto al configurar las Lambdas. Tras rotar la contraseña, actualiza la configuración de las funciones que la consumen para que CloudFormation vuelva a resolver el secreto.
+
+La instancia del stage parte con tablas vacías. Para un futuro corte de `dev`, migra y verifica sus datos antes de redirigir las APIs. Inicia sesión, crea una vacante, postula a un candidato, agenda una entrevista y regenera el reporte para validar los tres servicios.
