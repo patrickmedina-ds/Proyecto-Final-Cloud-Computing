@@ -1,74 +1,17 @@
 <!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EmpleaCRM · CRM de Empleabilidad</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <!-- Login -->
-  <section id="pantalla-login" class="login" hidden>
-    <form id="form-login" class="tarjeta login__tarjeta">
-      <div class="marca"><span class="marca__logo">E</span> EmpleaCRM</div>
-      <p class="sub">CRM de Empleabilidad Nacional · SaaS multi-tenant</p>
-      <label>Email
-        <input name="email" type="email" required autocomplete="username">
-      </label>
-      <label>Contraseña
-        <input name="password" type="password" required autocomplete="current-password">
-      </label>
-      <button class="btn btn--primario" id="btn-login" type="submit">Ingresar</button>
-      <p class="pista">Demo: <code>demo.tenant_1@cs2032.test</code> / <code>Demo-cs2032</code></p>
-    </form>
-  </section>
-
-  <!-- Aplicación -->
-  <div id="app" class="app" hidden>
-    <aside class="lateral">
-      <div class="marca"><span class="marca__logo">E</span> EmpleaCRM</div>
-      <nav id="menu">
-        <a href="#/dashboard" data-vista="dashboard">📊 Dashboard</a>
-        <a href="#/candidatos" data-vista="candidatos">👤 Candidatos</a>
-        <a href="#/vacantes" data-vista="vacantes">💼 Vacantes</a>
-        <a href="#/pipeline" data-vista="pipeline">🧭 Pipeline</a>
-        <a href="#/entrevistas" data-vista="entrevistas">📅 Entrevistas</a>
-        <a href="#/usuarios" data-vista="usuarios" id="menu-usuarios" hidden>👥 Usuarios</a>
-        <a href="docs.html" target="_blank">📘 API (Swagger)</a>
-      </nav>
-      <div class="lateral__pie">
-        <div id="tenant-badge" class="tenant"></div>
-        <div id="usuario-email" class="sub"></div>
-        <button class="btn btn--fantasma" id="btn-salir">Cerrar sesión</button>
-      </div>
-    </aside>
-    <main>
-      <header class="cabecera">
-        <h1 id="titulo-vista"></h1>
-        <div id="acciones-vista" class="acciones"></div>
-      </header>
-      <section id="vista"></section>
-      <details class="consola" id="consola">
-        <summary>Consola API <span id="consola-contador" class="sub"></span></summary>
-        <table><tbody id="consola-filas"></tbody></table>
-      </details>
-    </main>
-  </div>
-
-  <dialog id="modal">
-    <form method="dialog" id="modal-form" class="modal">
-      <h2 id="modal-titulo"></h2>
-      <div id="modal-cuerpo"></div>
-      <div class="modal__acciones">
-        <button class="btn btn--fantasma" value="cancelar" formnovalidate>Cancelar</button>
-        <button class="btn btn--primario" value="ok" id="modal-ok">Guardar</button>
-      </div>
-    </form>
-  </dialog>
-
-  <div id="toasts"></div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-</body>
+<html lang="es-PE">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#183e34">
+    <meta name="description" content="Espacio de trabajo para los equipos de selección de EmpleaCRM.">
+    <title>EmpleaCRM | Selección de personal</title>
+    <link rel="icon" href="data:,">
+    <script vite-ignore src="./config.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>Activa JavaScript en tu navegador para usar EmpleaCRM.</noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>

@@ -1,0 +1,46 @@
+service: cs2032-rds
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+
+resources:
+  Resources:
+    DbSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+        DBSubnetGroupDescription: Subredes privadas para MySQL del CRM
+        SubnetIds:
+          Fn::Split: [',', '${env:RDS_SUBNET_IDS}']
+
+    DbInstance:
+      Type: AWS::RDS::DBInstance
+      DeletionPolicy: Snapshot
+      UpdateReplacePolicy: Snapshot
+      Properties:
+        DBInstanceIdentifier: cs2032-vacantes-${sls:stage}-iac
+        Engine: mysql
+        DBInstanceClass: ${env:RDS_INSTANCE_CLASS}
+        AllocatedStorage: '20'
+        StorageType: gp3
+        StorageEncrypted: true
+        MasterUsername: ${env:RDS_USER}
+        ManageMasterUserPassword: true
+        DBSubnetGroupName:
+          Ref: DbSubnetGroup
+        VPCSecurityGroups:
+          - ${env:RDS_SECURITY_GROUP_ID}
+        PubliclyAccessible: false
+
+  Outputs:
+    RdsHost:
+      Value:
+        Fn::GetAtt: [DbInstance, Endpoint.Address]
+    RdsPort:
+      Value:
+        Fn::GetAtt: [DbInstance, Endpoint.Port]
+    RdsMasterSecretArn:
+      Value:
+        Fn::GetAtt: [DbInstance, MasterUserSecret.SecretArn]
