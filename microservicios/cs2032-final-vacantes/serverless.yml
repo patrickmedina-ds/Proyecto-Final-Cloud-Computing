@@ -16,6 +16,7 @@ provider:
     RDS_USER: ${env:RDS_USER}
     RDS_PORT: ${env:RDS_PORT, '3306'}
     RDS_PASSWORD: ${env:RDS_PASSWORD}
+    RDS_TLS: ${env:RDS_TLS, '0'}
   # Las Lambdas deben estar en la misma VPC que la instancia RDS. Tomar los valores
   # de la consola de AWS del Learner Lab (VPC > Security groups / Subnets; separar con comas
   # en la variable de entorno, ej. RDS_SG_IDS=sg-aaa y RDS_SUBNET_IDS=subnet-aaa,subnet-bbb).

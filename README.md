@@ -51,3 +51,7 @@ Cada README de microservicio documenta los endpoints, las variables de entorno y
 - Informe: `Informe_Final_CS2032.pdf` (raíz).
 - Evidencia reproducible: `informe/evidencia/`.
 - Hechos verificados y brechas: `informe/hechos_clave.md`.
+
+### Aprovisionamiento de RDS
+
+[Despliegue de RDS, esquemas y microservicios dependientes](infra/rds/README.md).

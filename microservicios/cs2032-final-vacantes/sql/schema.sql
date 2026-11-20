@@ -1,5 +1,5 @@
 -- Patrón "Single Database, Multiple Schemas": un schema por tenant, misma tabla en cada uno.
--- Se ejecuta una sola vez contra la instancia RDS MySQL (cliente SQL, no desde las Lambdas).
+-- Se puede volver a ejecutar. El despliegue lo aplica con la Lambda de inicialización.
 -- Refleja lo que el código guarda: además de las columnas del documento de referencia
 -- incluye area, ubicacion, modalidad y salario (validar_vacante / crear_vacante).
 -- candidato_id se conserva del documento aunque el código actual no lo escribe.

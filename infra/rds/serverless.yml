@@ -4,7 +4,29 @@ frameworkVersion: '3'
 provider:
   name: aws
   region: us-east-1
+  runtime: python3.11
+  iam:
+    role: ${env:RDS_LAMBDA_ROLE_ARN}
   stage: ${opt:stage, 'dev'}
+
+functions:
+  inicializar:
+    handler: inicializar.handler
+    timeout: 90
+    package:
+      artifact: ${env:RDS_BOOTSTRAP_ZIP}
+    vpc:
+      securityGroupIds:
+        - ${env:RDS_SG_IDS}
+      subnetIds:
+        Fn::Split: [',', '${env:RDS_SUBNET_IDS}']
+    environment:
+      RDS_HOST: !GetAtt DbInstance.Endpoint.Address
+      RDS_PORT: !GetAtt DbInstance.Endpoint.Port
+      RDS_USER:
+        Fn::Join: ['', ['{{resolve:secretsmanager:', !GetAtt DbInstance.MasterUserSecret.SecretArn, ':SecretString:username}}']]
+      RDS_PASSWORD:
+        Fn::Join: ['', ['{{resolve:secretsmanager:', !GetAtt DbInstance.MasterUserSecret.SecretArn, ':SecretString:password}}']]
 
 resources:
   Resources:
